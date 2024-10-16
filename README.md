@@ -1,4 +1,4 @@
-## Just Ramp-up: Unleash the Potential of Regression-based Estimator for A/B Tests under Network Interference
+# Just Ramp-up: Unleash the Potential of Regression-based Estimator for A/B Tests under Network Interference
 
 
 
