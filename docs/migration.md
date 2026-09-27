@@ -1,6 +1,8 @@
 # Migration from the original notebooks
 
-The original 37 notebooks, `Dataset/`, `Result/` and `table_output.py` remain at their original paths. They are a historical record; the maintained execution interface is now `python -m rampup`. Saved `.pkl` arrays are not loaded or reinterpreted by the new runner. Legacy notebooks may depend on cell order, missing intermediate files and their original package environment.
+The original 37 notebooks are archived unchanged under [`notebooks/legacy/`](../notebooks/legacy/README.md); `Dataset/`, `Result/` and `table_output.py` remain at their original paths. They are a historical record; the maintained execution interface is now `python -m rampup`. Saved `.pkl` arrays are not loaded or reinterpreted by the new runner. Legacy notebooks may depend on cell order, missing intermediate files and their original package environment.
+
+Notebook filenames, cell contents and saved outputs are unchanged. Their relative data and result paths still assume the repository root as the kernel's working directory; see the [archive's working-directory instructions](../notebooks/legacy/README.md#working-directory) before running cells. The initial refactor design and validation report describe the earlier layout, before this notebook reorganization.
 
 ## Material scientific and reproducibility differences
 

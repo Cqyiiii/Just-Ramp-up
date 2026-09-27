@@ -120,10 +120,10 @@ Just-Ramp-up/
 ├── reports/                 # standalone refactor validation report
 ├── Dataset/                 # original Stanford3 and Cornell5 graphs
 ├── Result/                  # preserved historical simulation outputs
-└── *.ipynb                  # preserved original experiment notebooks
+└── notebooks/legacy/        # archived original notebooks and browsing index
 ```
 
-Original notebooks remain available for historical inspection; [the migration map](docs/migration.md#scenario-mapping) explains their configuration equivalents. HT notebooks are legacy-only. The new runner does not claim implementations or reproductions of the manuscript's supplementary MII, Hájek, Lagrange or MIT8 experiments, whose complete source/data is absent from this snapshot.
+The 37 original notebooks are preserved unchanged in [`notebooks/legacy/`](notebooks/legacy/README.md), with a browsing index and instructions for their repository-root working directory. [The migration map](docs/migration.md#scenario-mapping) explains their configuration equivalents. HT notebooks are legacy-only. The new runner does not claim implementations or reproductions of the manuscript's supplementary MII, Hájek, Lagrange or MIT8 experiments, whose complete source/data is absent from this snapshot.
 
 ## Citation
 
