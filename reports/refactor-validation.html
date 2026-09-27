@@ -1,0 +1,3665 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Just Ramp-Up — Refactor validation</title><style>
+:root{--ink:#172a36;--muted:#536976;--line:#d9e2e5;--paper:#f7f8f4;--blue:#215e78;--accent:#c85b41}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+main{max-width:1160px;margin:auto;padding:52px 36px 80px}header{padding:34px 0 40px;border-bottom:2px solid var(--ink)}
+h1{font:600 clamp(32px,5vw,58px)/1.08 Georgia,serif;letter-spacing:-1.6px;margin:18px 0 24px;max-width:1000px}
+h2{font:600 29px/1.2 Georgia,serif;margin:42px 0 16px}h3{font-size:17px;margin:25px 0 8px}p{max-width:950px;margin:12px 0}
+.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:2px;color:var(--blue);font-weight:700}.lede{font-size:20px;color:var(--muted);max-width:860px}
+.pill{display:inline-block;background:#e1ece7;color:#22513e;padding:4px 12px;border-radius:16px;font-size:12px;font-weight:700;margin-right:8px}
+.caution{background:#f5e4dc;color:#853c2c}.notice{border-left:4px solid var(--accent);padding:12px 20px;background:#fff3ec;margin:22px 0}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin:30px 0}.metric{padding:18px 0;border-top:1px solid var(--line)}.metric strong{display:block;font-size:32px;font-weight:600;line-height:1.2}.metric span{font-size:13px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums;background:white}th,td{padding:12px 13px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th{background:#e7eef0;font-weight:600}th:first-child,td:first-child{text-align:left}.scroll{overflow-x:auto;margin:18px 0}tr:last-child td{border-bottom:0}
+details{border:1px solid var(--line);background:white;padding:14px 18px;margin:14px 0}summary{cursor:pointer;font-weight:600}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;background:#eaf0f1;padding:18px;border-radius:5px;max-height:650px;overflow:auto}
+code{font:13px ui-monospace,SFMono-Regular,Consolas,monospace}.caption,small{color:var(--muted);font-size:13px}.chart{display:block;width:100%;height:auto;background:white;border:1px solid var(--line)}a{color:var(--blue)}li{margin:7px 0}footer{margin-top:46px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+@media(max-width:650px){main{padding:22px 18px 44px}.metrics{grid-template-columns:repeat(2,1fr)}h1{letter-spacing:-.7px}th,td{padding:9px}}@media print{body{background:white}main{padding:0}details{break-inside:avoid}pre{max-height:none}.scroll{overflow:visible}}
+</style></head><body><main><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Engineering evidence</div><h1>A reproducible experiment system,<br>with explicit scientific boundaries.</h1><span class="pill">VALIDATION PASSED</span><p class="lede">58 tests, 5 bounded execution cases, 69 inspectable estimates. This report records the system refactor and its verification; it does not claim to reproduce the paper’s numerical tables.</p></header><h2>What was changed and why</h2><p>The original repository distributed experimental logic across 37 notebooks with duplicated graph loading, randomization, outcome functions, model training and result handling. The user requested maintainability and reproducibility, a polished NeurIPS 2026 README, and a push back to the same repository. The latest supplied manuscript defines the intended experimental settings.</p><p>The maintained <code>rampup</code> package now separates those responsibilities and exposes a configuration-driven CLI. Historical notebooks and result arrays remain available in place. The new engine corrects node/feature alignment and dynamic-graph forwarding, records realized experimental designs, and commits complete repetitions atomically. Each run includes its own offline report.</p><h2>Frozen verification design and gates</h2><p>The confirmatory engineering checks are numerical tests on hand-computed fixtures, real GNN stage-graph/determinism tests, recovery/corruption/concurrency tests, CLI integration, all six outcome families across four merge/level combinations, and a distributable wheel build. Acceptance requires a zero test/build exit code and valid complete records for every execution case. No accuracy threshold or paper-effect confirmation is imposed on small smoke runs.</p><p>The five execution cases were chosen before execution to cover OLS, GNN, dynamic stage graphs, sparse two-hop interference on Stanford, and the near-zero cluster baseline. Their seed is 2026; GNN initialization uses seed 2. Synthetic cases use 60 nodes and three proportions; real cases use the five paper proportions. Full frozen configurations and exact per-case evidence are embedded below.</p><div class="scroll"><table><tr><th>Case</th><th>Status</th><th>Repetitions</th><th>Estimates</th><th>Nodes</th><th>Initial edges</th></tr><tr><td>synthetic-ols</td><td>complete</td><td>8</td><td>24</td><td>60</td><td>180</td></tr><tr><td>synthetic-gnn</td><td>complete</td><td>3</td><td>9</td><td>60</td><td>180</td></tr><tr><td>synthetic-dynamic-gnn</td><td>complete</td><td>2</td><td>6</td><td>60</td><td>180</td></tr><tr><td>stanford-two-hop-ols</td><td>complete</td><td>3</td><td>15</td><td>11586</td><td>568309</td></tr><tr><td>stanford-cluster-baseline-ols</td><td>complete</td><td>3</td><td>15</td><td>11586</td><td>568309</td></tr></table></div><h2>Evidence and interpretation</h2><p>Small-run metrics are exploratory diagnostics of the configured pipeline, not confirmatory evidence for the paper. In particular, the GNN runs use only 4 or 8 epochs and 2 or 3 repetitions: poor estimates, large errors or reversals are retained rather than filtered. OLS and GNN results from different configurations are not a controlled estimator comparison.</p><h3>synthetic-ols</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>8</td><td>2</td><td>1.00276</td><td>-0.997238</td><td>0.0649398</td><td>0.9987</td><td>[-1.05528, -0.939198]</td></tr><tr><td>merge-2</td><td>8</td><td>2</td><td>1.0713</td><td>-0.928701</td><td>0.034416</td><td>0.863671</td><td>[-0.959461, -0.897942]</td></tr><tr><td>merge-3</td><td>8</td><td>2</td><td>1.13434</td><td>-0.865659</td><td>0.0327464</td><td>0.750437</td><td>[-0.894926, -0.836392]</td></tr></tbody></table></div><h3>synthetic-gnn</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>3</td><td>2</td><td>0.0155333</td><td>-1.98447</td><td>8.06698e-05</td><td>3.93811</td><td>[-1.98471, -1.98422]</td></tr><tr><td>merge-2</td><td>3</td><td>2</td><td>0.0782968</td><td>-1.9217</td><td>0.000432227</td><td>3.69294</td><td>[-1.92302, -1.92039]</td></tr><tr><td>merge-3</td><td>3</td><td>2</td><td>0.130674</td><td>-1.86933</td><td>0.000804912</td><td>3.49438</td><td>[-1.87178, -1.86688]</td></tr></tbody></table></div><h3>synthetic-dynamic-gnn</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>2</td><td>2</td><td>-0.00765914</td><td>-2.00766</td><td>0.00019592</td><td>4.0307</td><td>[-2.01015, -2.00517]</td></tr><tr><td>merge-2</td><td>2</td><td>2</td><td>0.0105729</td><td>-1.98943</td><td>0.000322402</td><td>3.95782</td><td>[-1.99352, -1.98533]</td></tr><tr><td>merge-3</td><td>2</td><td>2</td><td>0.024949</td><td>-1.97505</td><td>0.000660062</td><td>3.90083</td><td>[-1.98344, -1.96666]</td></tr></tbody></table></div><h3>stanford-two-hop-ols</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>3</td><td>2.4891</td><td>0.998772</td><td>-1.49033</td><td>0.00281593</td><td>2.22108</td><td>[-1.49889, -1.48176]</td></tr><tr><td>merge-2</td><td>3</td><td>2.4891</td><td>1.09951</td><td>-1.38959</td><td>0.00221658</td><td>1.93096</td><td>[-1.39633, -1.38284]</td></tr><tr><td>merge-3</td><td>3</td><td>2.4891</td><td>1.20096</td><td>-1.28814</td><td>0.00260038</td><td>1.65931</td><td>[-1.29605, -1.28023]</td></tr><tr><td>merge-4</td><td>3</td><td>2.4891</td><td>1.26297</td><td>-1.22613</td><td>0.00276386</td><td>1.5034</td><td>[-1.23454, -1.21772]</td></tr><tr><td>merge-5</td><td>3</td><td>2.4891</td><td>1.31134</td><td>-1.17776</td><td>0.00291521</td><td>1.38713</td><td>[-1.18663, -1.16889]</td></tr></tbody></table></div><h3>stanford-cluster-baseline-ols</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>baseline+0.02</td><td>3</td><td>2</td><td>1.3926</td><td>-0.607399</td><td>0.161518</td><td>0.395021</td><td>[-1.09881, -0.115992]</td></tr><tr><td>baseline+0.05</td><td>3</td><td>2</td><td>1.37836</td><td>-0.621637</td><td>0.0983293</td><td>0.396101</td><td>[-0.920797, -0.322476]</td></tr><tr><td>baseline+0.1</td><td>3</td><td>2</td><td>1.40992</td><td>-0.590083</td><td>0.0546118</td><td>0.35118</td><td>[-0.756235, -0.42393]</td></tr><tr><td>baseline+0.25</td><td>3</td><td>2</td><td>1.51922</td><td>-0.480781</td><td>0.0452264</td><td>0.233196</td><td>[-0.618379, -0.343183]</td></tr><tr><td>baseline+0.5</td><td>3</td><td>2</td><td>1.62015</td><td>-0.379849</td><td>0.00152383</td><td>0.144287</td><td>[-0.384485, -0.375212]</td></tr></tbody></table></div><h2>Data provenance and scientific deviations</h2><p>The repository Stanford edge file has 11,586 nodes and 568,309 undirected edges. The current deterministic partition contains 197 communities; the manuscript lists 192. Canonical ordering and the recorded NetworkX version define this run’s partition. Historical arrays were preserved and not loaded for validation, so no claim is made about their completion status or correctness.</p><p>The static estimand is the noise-averaged difference between global treatment and control on the evaluation graph. Assignment and noise use separate seed streams, and merge groups share their underlying stage data. No train/test split, model-selection sweep or unreported exclusion was performed. Complete configuration, imported versions, graph counts, selected repetition IDs and failure/resume records are embedded in each case.</p><details><summary>Complete migration audit and scenario mapping</summary><pre># Migration from the original notebooks
+
+The original 37 notebooks, `Dataset/`, `Result/` and `table_output.py` remain at their original paths. They are a historical record; the maintained execution interface is now `python -m rampup`. Saved `.pkl` arrays are not loaded or reinterpreted by the new runner. Legacy notebooks may depend on cell order, missing intermediate files and their original package environment.
+
+## Material scientific and reproducibility differences
+
+| Area | Historical implementation | Maintained runner |
+|---|---|---|
+| Unit IDs | Some assignments use array indices 0..n−1 as labels in a graph labelled 1..n. | Canonical IDs and row indices are explicit and aligned. |
+| GNN feature order | Features iterate NetworkX insertion order; `dgl.from_networkx` may relabel in sorted order. | Sparse adjacency, treatment, outcomes and GNN features share sorted original IDs. |
+| Dynamic graphs | Some notebooks train every stage on the final `dgl_G`, and use old cluster labels on newly indexed graphs. | Each stage carries its own graph; original node mapping and baseline clusters are preserved. Evaluation uses the last selected stage&#x27;s graph. |
+| Treatment count | Quantile comparisons (`&lt;` versus `&lt;=`) can produce different counts. | Complete randomization treats exactly floor(p × number of entities). Realized unit and entity counts are recorded. |
+| Near-zero baseline | Several notebooks use no treated entities at p=0; others use one. | `baseline=&quot;one&quot;` follows the latest manuscript. `baseline=&quot;zero&quot;` explicitly chooses true global control. |
+| Temporal independence | Some `no_ramp` notebooks redraw randomness between merge groups but share it within a group. | `temporal=&quot;independent&quot;` draws a new assignment at every stage. |
+| Repeated experiments | Repeat notebooks reuse an identical set of treated units. | `merge=&quot;repeated&quot;` repeats the final propensity; `temporal` explicitly chooses shared or independent assignments. |
+| Stage outcomes | Noise can be redrawn as a group is reconstructed. | Each stage is generated once per repetition and shared by merge comparisons. Group comparisons are paired. |
+| Two-hop interference | Dense adjacency and matrix powers; some HT notebooks require a missing `A_2hop.pkl`. | Sparse matvecs and analytic diagonal removal; true GATE derives from the actual graph. |
+| Dynamic evolution | Seed may reset at each stage; node insertion order affects candidate IDs. | One explicit graph-seed stream, fixed canonical IDs, recorded edge counts. |
+| Repetition count | GNN notebooks allocate 1000 rows; the current manuscript reports 100 repetitions. | Paper presets use 100; the frozen run config records overrides. |
+| Completion state | Preallocated zero rows can be summarized after an interrupted run. | A checkpoint exists only after the entire repetition completes; genuine numerical zeros are retained. |
+| Summary | `table_output.py` requires manual result paths and a manually selected true GATE. | Summaries use each group&#x27;s graph-specific truth and only validated complete records. |
+
+These corrections preserve the intended formulas and architecture, not the exact historical random streams or numerical arrays. **Do not treat new outputs as bitwise reproductions of the published tables.** The old outputs have not been overwritten, certified or used as newly executed results.
+
+## Graph partition discrepancy
+
+The checked-in Stanford file validates to **11,586 nodes and 568,309 undirected edges**, matching the manuscript. Under canonical node order and the validation environment&#x27;s NetworkX 3.6.1, Louvain with resolution 10 and seed 10 yields **197 communities**; the manuscript lists **192**. The implementation records the actual `clusters.json` partition, package versions and graph counts. Matching a seed and resolution alone does not recreate an unspecified historical node ordering and library implementation. Exact historical replication requires the original partition and environment.
+
+## Scenario mapping
+
+| Notebook family | Configuration |
+|---|---|
+| `CR_*_ramp_final` | `randomization=complete`, `temporal=staggered`, `merge=suffix` |
+| `Ber_*_ramp_final` | `randomization=bernoulli`, `temporal=staggered`, `merge=suffix` |
+| `*_no_ramp_final` | `temporal=independent` (with the correction above) |
+| `CR_*_repeat_final` | `merge=repeated`; select temporal dependence explicitly |
+| `2step_CR_*` | Use stages `[0.02,0.5]` and `merge=final_pair`; the pair is reported alongside final-only |
+| `incre_2step_CR_*` | `merge=baseline_pair`, `outcome=linear` |
+| `2hop*` / `incre_2hop*` | `outcome=two_hop`, suffix / baseline pairs |
+| `Multiplicative*`, `sqrt*`, `square*` | `outcome=multiplicative`, `sqrt`, `quadratic` |
+| `Dynamic*` / `Dynamic_incre*` | `outcome=dynamic`, suffix / baseline pairs |
+| `*_unit` / `*_cluster` | `level=unit` / `cluster` |
+
+`ht_unit_ramp.ipynb`, `ht_cluster_ramp.ipynb` and `tables.ipynb` remain legacy-only. This repository snapshot has no complete MII, Hájek or Lagrange implementation, and contains Cornell5 rather than the manuscript&#x27;s supplementary MIT8 dataset. The refactor does not fabricate those missing experiments.
+
+## Resume boundaries
+
+Resume requires identical configuration, imported dependency versions, data filename/size/mtime, graph counts, node and cluster mapping, merge definitions and source Git revision. Repetitions use separate deterministic streams, so recomputing a missing repetition does not change any completed result. Exact numerical resume assumes unchanged implementation and a consistent execution environment; the metadata is lightweight provenance, not a cryptographic tamper-proof archive. Commit implementation changes before starting long studies. A report rebuilt from corrupt records is prominently marked invalid and publishes no aggregate results.
+</pre></details><h2>Exact verification record</h2><pre>[
+  {
+    &quot;command&quot;: &quot;python -m pytest -q&quot;,
+    &quot;exit_code&quot;: 0,
+    &quot;elapsed_seconds&quot;: 26.925,
+    &quot;stdout&quot;: &quot;..........................................................               [100%]\n58 passed in 25.49s\n&quot;,
+    &quot;stderr&quot;: &quot;&quot;
+  },
+  {
+    &quot;command&quot;: &quot;python -m pip wheel --no-deps --no-build-isolation --no-cache-dir --wheel-dir [local path] .&quot;,
+    &quot;exit_code&quot;: 0,
+    &quot;elapsed_seconds&quot;: 4.457,
+    &quot;stdout&quot;: &quot;Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple\nProcessing [local path]\n  Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status &#x27;done&#x27;\nBuilding wheels for collected packages: just-ramp-up\n  Building wheel for just-ramp-up (pyproject.toml): started\n  Building wheel for just-ramp-up (pyproject.toml): finished with status &#x27;done&#x27;\n  Created wheel for just-ramp-up: filename=just_ramp_up-0.1.0-py3-none-any.whl size=25735 sha256=9abed6a0cad0a381e2821400dbc3e9b5e03e89c22a5a565f89440d3b08bdeb87\n  Stored in directory: [local path]\nSuccessfully built just-ramp-up\n&quot;,
+    &quot;stderr&quot;: &quot;&quot;
+  }
+]</pre><p>The first implementation checks intentionally failed while the new modules were absent. Subsequent red/green cycles exposed and fixed an impossible one-entity baseline on tiny staggered designs and missing validation of stored treatment-count diagnostics. One square-root numerical fixture was corrected after its handwritten expectation omitted its configured factor of two; the production formula was already correct. No historical experiment outcomes were substituted into these checks.</p><h2>Embedded experiment reports</h2><p>Each section contains the full run configuration, metrics, uncertainty formulas, stage diagnostics, execution attempts, limitations, raw estimates and a machine-readable handoff. All content is embedded; no network, server or sibling file is needed.</p><details><summary>synthetic-ols — complete embedded experiment report</summary><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Reproducible experiments</div><h1>Ramp-up experiment report</h1><span class="pill ">COMPLETE</span><span class="pill">OLS · linear</span><p class="lede">Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.</p></header><section><h2>Execution outcome</h2><p>Run <code>synthetic-ols</code> contains 8 validated complete repetitions out of 8 requested, producing 24 estimates. Status is derived from both the execution record and the available checkpoints.</p><div class="metrics"><div class="metric"><strong>8</strong><span>Complete repetitions</span></div><div class="metric"><strong>24</strong><span>Estimate records</span></div><div class="metric"><strong>60</strong><span>Graph nodes</span></div><div class="metric"><strong>180</strong><span>Initial edges</span></div></div></section><section><h2>Objective and experimental design</h2><p>GATE is the difference between mean potential outcomes under global treatment and global control. The study examines whether training a regression model on multiple treatment proportions improves this extrapolation under network interference. These runs quantify configured scenarios; no automatic hypothesis acceptance gate is imposed.</p><p>Design reference: the supplied NeurIPS 2026 manuscript, <em>Just Ramp-Up: Debiasing Regression-based Estimator for A/B Tests under Network Interference</em>, simulation study and detailed-experiment appendices. The linked preprint may retain its earlier title: <a href="https://arxiv.org/abs/2410.12740">arXiv:2410.12740</a>.</p><p>Each repetition has independent assignment and noise random streams derived from its root seed and repetition ID. Stages are generated once and reused across merge groups. Complete randomization selects floor(p × entity count) entities; cluster assignments preserve membership. A one-entity baseline differs from exact global control. The latest selected stage supplies the graph used for counterfactual evaluation.</p><h3>Frozen configuration</h3><pre>{
+  &quot;dataset&quot;: &quot;demo&quot;,
+  &quot;outcome&quot;: &quot;linear&quot;,
+  &quot;level&quot;: &quot;unit&quot;,
+  &quot;randomization&quot;: &quot;complete&quot;,
+  &quot;temporal&quot;: &quot;staggered&quot;,
+  &quot;merge&quot;: &quot;suffix&quot;,
+  &quot;baseline&quot;: &quot;one&quot;,
+  &quot;stages&quot;: [
+    0.1,
+    0.25,
+    0.5
+  ],
+  &quot;estimator&quot;: &quot;ols&quot;,
+  &quot;repetitions&quot;: 8,
+  &quot;seed&quot;: 2026,
+  &quot;graph_seed&quot;: 0,
+  &quot;cluster_seed&quot;: 10,
+  &quot;model_seed&quot;: 2,
+  &quot;resolution&quot;: 10.0,
+  &quot;epochs&quot;: 400,
+  &quot;learning_rate&quot;: 0.004,
+  &quot;threads&quot;: 1,
+  &quot;alpha&quot;: 1.0,
+  &quot;beta&quot;: 1.0,
+  &quot;gamma&quot;: 1.0,
+  &quot;sigma&quot;: 0.1,
+  &quot;r2&quot;: 0.5,
+  &quot;purpose&quot;: &quot;smoke&quot;
+}</pre><h3>Selected stage groups and graph-specific truth</h3><pre>[
+  {
+    &quot;label&quot;: &quot;merge-1&quot;,
+    &quot;indices&quot;: [
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;merge-2&quot;,
+    &quot;indices&quot;: [
+      1,
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;merge-3&quot;,
+    &quot;indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  }
+]</pre></section><section><h2>Results and Monte Carlo uncertainty</h2><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>8</td><td>2</td><td>1.00276</td><td>-0.997238</td><td>0.0649398</td><td>0.9987</td><td>[-1.05528, -0.939198]</td></tr><tr><td>merge-2</td><td>8</td><td>2</td><td>1.0713</td><td>-0.928701</td><td>0.034416</td><td>0.863671</td><td>[-0.959461, -0.897942]</td></tr><tr><td>merge-3</td><td>8</td><td>2</td><td>1.13434</td><td>-0.865659</td><td>0.0327464</td><td>0.750437</td><td>[-0.894926, -0.836392]</td></tr></tbody></table></div><svg class="chart" viewBox="0 0 1000 216" role="img" aria-label="MSE by selected stage group"><text x="22" y="26" fill="#536976" font-size="13">Empirical mean squared error · axis begins at zero</text><text x="22" y="66" font-size="15" fill="#172a36">merge-1</text><rect x="205" y="45" width="660.000" height="30" rx="3" fill="#215e78"/><text x="875.000" y="66" font-size="14" fill="#172a36">0.9987</text><text x="22" y="118" font-size="15" fill="#172a36">merge-2</text><rect x="205" y="97" width="570.765" height="30" rx="3" fill="#215e78"/><text x="785.765" y="118" font-size="14" fill="#172a36">0.863671</text><text x="22" y="170" font-size="15" fill="#172a36">merge-3</text><rect x="205" y="149" width="495.933" height="30" rx="3" fill="#215e78"/><text x="710.933" y="170" font-size="14" fill="#172a36">0.750437</text></svg><p class="caption">Signed bias = mean(estimate − truth). Std uses ddof=0. MSE = mean((estimate − truth)²). Bias intervals use a Student-t critical value and the sample standard error of the errors. MSE intervals (in the detailed metrics) use a normal approximation, clipped at zero. With fewer than two repetitions, intervals are unavailable.</p><details><summary>Exact metrics and uncertainty</summary><pre>[
+  {
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;n&quot;: 8,
+    &quot;mean_estimate&quot;: 1.002762208595592,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -0.9972377914044079,
+    &quot;std&quot;: 0.0649397955482589,
+    &quot;mse&quot;: 0.9987003896509912,
+    &quot;bias_mcse&quot;: 0.024544935601724636,
+    &quot;mse_mcse&quot;: 0.050060807163882,
+    &quot;bias_ci95&quot;: [
+      -1.055277341382029,
+      -0.9391982414267868
+    ],
+    &quot;mse_ci95&quot;: [
+      0.9005812076097824,
+      1.0968195716921998
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;n&quot;: 8,
+    &quot;mean_estimate&quot;: 1.0712985506664157,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -0.9287014493335843,
+    &quot;std&quot;: 0.03441596080722117,
+    &quot;mse&quot;: 0.8636708403525842,
+    &quot;bias_mcse&quot;: 0.013008010489607567,
+    &quot;mse_mcse&quot;: 0.024365409120688398,
+    &quot;bias_ci95&quot;: [
+      -0.9594605064022838,
+      -0.8979423922648849
+    ],
+    &quot;mse_ci95&quot;: [
+      0.815914638476035,
+      0.9114270422291335
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;n&quot;: 8,
+    &quot;mean_estimate&quot;: 1.1343413466979717,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -0.8656586533020284,
+    &quot;std&quot;: 0.03274636799351053,
+    &quot;mse&quot;: 0.7504372286534478,
+    &quot;bias_mcse&quot;: 0.012376963721633431,
+    &quot;mse_mcse&quot;: 0.021708580901562212,
+    &quot;bias_ci95&quot;: [
+      -0.8949255218792869,
+      -0.8363917847247699
+    ],
+    &quot;mse_ci95&quot;: [
+      0.7078884100863858,
+      0.7929860472205097
+    ]
+  }
+]</pre></details></section><section><h2>Methods, provenance and diagnostics</h2><p>Node IDs are sorted once and shared by adjacency, treatment, features and responses. Graphs must be simple, unweighted and have no isolated nodes. Two-hop interference uses Wz + r₂[W(Wz) − diag(W²)z], with W = D⁻¹A; the diagonal removes closed walks without constructing a dense squared adjacency. True GATE is computed by averaging the noise-free global-treatment and global-control outcomes on the evaluation graph.</p><p>OLS fits an intercept and treatment on pooled observations. GNN uses three DGL ChebConv layers (2→16, K=2), (16→16, K=1), (16→1, K=1), ReLU, degree and treatment features, and Adam with betas (0.9, 0.999). Each epoch steps the optimizer through the selected stages in order, using each stage’s own graph. No held-out predictive test set or model-selection search is used.</p><p>Dynamic graphs are fixed across repetitions and evolve independently of treatment: each node at or above the degree median gets five candidate neighbors drawn with replacement proportional to current degree; loops and existing edges are discarded. Initial cluster membership stays fixed. Recorded edge counts are realized values, not a promise to match historical notebook RNG output.</p><pre>{
+  &quot;source&quot;: {
+    &quot;name&quot;: &quot;synthetic Watts-Strogatz&quot;,
+    &quot;nodes&quot;: 60,
+    &quot;degree&quot;: 6,
+    &quot;rewire&quot;: 0.2,
+    &quot;graph_seed&quot;: 0
+  },
+  &quot;graph&quot;: {
+    &quot;nodes&quot;: 60,
+    &quot;edges&quot;: 180,
+    &quot;clusters&quot;: null,
+    &quot;minimum_degree&quot;: 4.0,
+    &quot;maximum_degree&quot;: 8.0,
+    &quot;stage_edges&quot;: [
+      180,
+      180,
+      180
+    ],
+    &quot;node_order&quot;: &quot;sorted original IDs&quot;
+  },
+  &quot;versions&quot;: {
+    &quot;rampup&quot;: &quot;0.1.0&quot;,
+    &quot;python&quot;: &quot;3.11.13&quot;,
+    &quot;numpy&quot;: &quot;1.26.4&quot;,
+    &quot;scipy&quot;: &quot;1.16.0&quot;,
+    &quot;networkx&quot;: &quot;3.4.2&quot;
+  },
+  &quot;git&quot;: {
+    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+    &quot;dirty&quot;: true
+  },
+  &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
+}</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;seed&quot;: [
+      2026,
+      0
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.012639343584656086,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.03328120118417737,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.0372826987276392,
+        &quot;edges&quot;: 180
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;seed&quot;: [
+      2026,
+      1
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.01519234182098765,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.034506936177248676,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.06268988213340891,
+        &quot;edges&quot;: 180
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;seed&quot;: [
+      2026,
+      2
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.009804539871504153,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.02292243441358024,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.04174056555492568,
+        &quot;edges&quot;: 180
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 3,
+    &quot;seed&quot;: [
+      2026,
+      3
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.015983756928697402,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.022952428193499623,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.03809652777777777,
+        &quot;edges&quot;: 180
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 4,
+    &quot;seed&quot;: [
+      2026,
+      4
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.016169258629377677,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.030948039099899217,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.05688805862622826,
+        &quot;edges&quot;: 180
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 5,
+    &quot;seed&quot;: [
+      2026,
+      5
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.01261220198727639,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.017319779462711012,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.02558507298752834,
+        &quot;edges&quot;: 180
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 6,
+    &quot;seed&quot;: [
+      2026,
+      6
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.013100533430964978,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.03805728772990678,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.038412838561350464,
+        &quot;edges&quot;: 180
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 7,
+    &quot;seed&quot;: [
+      2026,
+      7
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.013214748677248676,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.03649538414902998,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.036422491496598625,
+        &quot;edges&quot;: 180
+      }
+    ]
+  }
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+  {
+    &quot;started_at&quot;: &quot;2026-09-27T06:59:23+00:00&quot;,
+    &quot;resume&quot;: false,
+    &quot;status&quot;: &quot;complete&quot;,
+    &quot;completed_this_attempt&quot;: 8,
+    &quot;finished_at&quot;: &quot;2026-09-27T06:59:23+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 0.015424
+  }
+]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 1.0546995673171793,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.04695484173218234
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.0565706375448904,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.0551176161571091
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.1105228940136131,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.05663414685103986
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 1.0736505810287464,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.07300745539381127
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.105241409849858,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.07535721881052707
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.1476580663608202,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.06990078429512893
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 1.0216917580180656,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.045693599053006184
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.0840730704689514,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.04818624653585945
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.12663213828048,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.05168792149061014
+  },
+  {
+    &quot;replicate&quot;: 3,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 0.981218733214059,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.05263659923872312
+  },
+  {
+    &quot;replicate&quot;: 3,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.039671150815656,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.05463796482746038
+  },
+  {
+    &quot;replicate&quot;: 3,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.1451422041045747,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.06286176375744576
+  },
+  {
+    &quot;replicate&quot;: 4,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 1.0680744716207144,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.0605358554777622
+  },
+  {
+    &quot;replicate&quot;: 4,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.1180965904905944,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.06444039806107915
+  },
+  {
+    &quot;replicate&quot;: 4,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.1857088165196323,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.06835469292907419
+  },
+  {
+    &quot;replicate&quot;: 5,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 1.0157292641001254,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.033919541158181375
+  },
+  {
+    &quot;replicate&quot;: 5,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.0949535189527981,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.04770205196461881
+  },
+  {
+    &quot;replicate&quot;: 5,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.1511476553534832,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.04929264604870935
+  },
+  {
+    &quot;replicate&quot;: 6,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 0.9265287879626543,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.043061431188005476
+  },
+  {
+    &quot;replicate&quot;: 6,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.0649268152694666,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.06870438794244785
+  },
+  {
+    &quot;replicate&quot;: 6,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.1419770648917238,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.06695564508662417
+  },
+  {
+    &quot;replicate&quot;: 7,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 0.8805045055031919,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.039859282172181675
+  },
+  {
+    &quot;replicate&quot;: 7,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.0068552119391108,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.06456396257555551
+  },
+  {
+    &quot;replicate&quot;: 7,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 1.0659419340594458,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.06578741049861722
+  }
+]</pre></details><h3>Machine-readable handoff</h3><pre id="handoff-synthetic-ols">{
+  &quot;study_id&quot;: &quot;synthetic-ols&quot;,
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;frozen_claim&quot;: &quot;Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.&quot;,
+  &quot;outcome_access&quot;: &quot;validated_completed_records_read&quot;,
+  &quot;expected_repetitions&quot;: 8,
+  &quot;completed_repetitions&quot;: 8,
+  &quot;validated_estimate_count&quot;: 24,
+  &quot;key_metrics&quot;: [
+    {
+      &quot;group&quot;: &quot;merge-1&quot;,
+      &quot;n&quot;: 8,
+      &quot;mean_estimate&quot;: 1.002762208595592,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -0.9972377914044079,
+      &quot;std&quot;: 0.0649397955482589,
+      &quot;mse&quot;: 0.9987003896509912,
+      &quot;bias_mcse&quot;: 0.024544935601724636,
+      &quot;mse_mcse&quot;: 0.050060807163882,
+      &quot;bias_ci95&quot;: [
+        -1.055277341382029,
+        -0.9391982414267868
+      ],
+      &quot;mse_ci95&quot;: [
+        0.9005812076097824,
+        1.0968195716921998
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-2&quot;,
+      &quot;n&quot;: 8,
+      &quot;mean_estimate&quot;: 1.0712985506664157,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -0.9287014493335843,
+      &quot;std&quot;: 0.03441596080722117,
+      &quot;mse&quot;: 0.8636708403525842,
+      &quot;bias_mcse&quot;: 0.013008010489607567,
+      &quot;mse_mcse&quot;: 0.024365409120688398,
+      &quot;bias_ci95&quot;: [
+        -0.9594605064022838,
+        -0.8979423922648849
+      ],
+      &quot;mse_ci95&quot;: [
+        0.815914638476035,
+        0.9114270422291335
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-3&quot;,
+      &quot;n&quot;: 8,
+      &quot;mean_estimate&quot;: 1.1343413466979717,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -0.8656586533020284,
+      &quot;std&quot;: 0.03274636799351053,
+      &quot;mse&quot;: 0.7504372286534478,
+      &quot;bias_mcse&quot;: 0.012376963721633431,
+      &quot;mse_mcse&quot;: 0.021708580901562212,
+      &quot;bias_ci95&quot;: [
+        -0.8949255218792869,
+        -0.8363917847247699
+      ],
+      &quot;mse_ci95&quot;: [
+        0.7078884100863858,
+        0.7929860472205097
+      ]
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.&quot;,
+    &quot;A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.&quot;,
+    &quot;Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.&quot;,
+    &quot;Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.&quot;,
+    &quot;GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.&quot;
+  ],
+  &quot;next_authorized_step&quot;: &quot;Inspect configuration and diagnostics before a full replication run; do not infer unrun paper outcomes.&quot;
+}</pre></section><footer>Standalone report · No external scripts, fonts, styles or images · Generated from validated experiment artifacts</footer></details><details><summary>synthetic-gnn — complete embedded experiment report</summary><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Reproducible experiments</div><h1>Ramp-up experiment report</h1><span class="pill ">COMPLETE</span><span class="pill">GNN · linear</span><p class="lede">Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.</p></header><section><h2>Execution outcome</h2><p>Run <code>synthetic-gnn</code> contains 3 validated complete repetitions out of 3 requested, producing 9 estimates. Status is derived from both the execution record and the available checkpoints.</p><div class="metrics"><div class="metric"><strong>3</strong><span>Complete repetitions</span></div><div class="metric"><strong>9</strong><span>Estimate records</span></div><div class="metric"><strong>60</strong><span>Graph nodes</span></div><div class="metric"><strong>180</strong><span>Initial edges</span></div></div></section><section><h2>Objective and experimental design</h2><p>GATE is the difference between mean potential outcomes under global treatment and global control. The study examines whether training a regression model on multiple treatment proportions improves this extrapolation under network interference. These runs quantify configured scenarios; no automatic hypothesis acceptance gate is imposed.</p><p>Design reference: the supplied NeurIPS 2026 manuscript, <em>Just Ramp-Up: Debiasing Regression-based Estimator for A/B Tests under Network Interference</em>, simulation study and detailed-experiment appendices. The linked preprint may retain its earlier title: <a href="https://arxiv.org/abs/2410.12740">arXiv:2410.12740</a>.</p><p>Each repetition has independent assignment and noise random streams derived from its root seed and repetition ID. Stages are generated once and reused across merge groups. Complete randomization selects floor(p × entity count) entities; cluster assignments preserve membership. A one-entity baseline differs from exact global control. The latest selected stage supplies the graph used for counterfactual evaluation.</p><h3>Frozen configuration</h3><pre>{
+  &quot;dataset&quot;: &quot;demo&quot;,
+  &quot;outcome&quot;: &quot;linear&quot;,
+  &quot;level&quot;: &quot;unit&quot;,
+  &quot;randomization&quot;: &quot;complete&quot;,
+  &quot;temporal&quot;: &quot;staggered&quot;,
+  &quot;merge&quot;: &quot;suffix&quot;,
+  &quot;baseline&quot;: &quot;one&quot;,
+  &quot;stages&quot;: [
+    0.1,
+    0.25,
+    0.5
+  ],
+  &quot;estimator&quot;: &quot;gnn&quot;,
+  &quot;repetitions&quot;: 3,
+  &quot;seed&quot;: 2026,
+  &quot;graph_seed&quot;: 0,
+  &quot;cluster_seed&quot;: 10,
+  &quot;model_seed&quot;: 2,
+  &quot;resolution&quot;: 10.0,
+  &quot;epochs&quot;: 8,
+  &quot;learning_rate&quot;: 0.004,
+  &quot;threads&quot;: 1,
+  &quot;alpha&quot;: 1.0,
+  &quot;beta&quot;: 1.0,
+  &quot;gamma&quot;: 1.0,
+  &quot;sigma&quot;: 0.1,
+  &quot;r2&quot;: 0.5,
+  &quot;purpose&quot;: &quot;smoke&quot;
+}</pre><h3>Selected stage groups and graph-specific truth</h3><pre>[
+  {
+    &quot;label&quot;: &quot;merge-1&quot;,
+    &quot;indices&quot;: [
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;merge-2&quot;,
+    &quot;indices&quot;: [
+      1,
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;merge-3&quot;,
+    &quot;indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  }
+]</pre></section><section><h2>Results and Monte Carlo uncertainty</h2><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>3</td><td>2</td><td>0.0155333</td><td>-1.98447</td><td>8.06698e-05</td><td>3.93811</td><td>[-1.98471, -1.98422]</td></tr><tr><td>merge-2</td><td>3</td><td>2</td><td>0.0782968</td><td>-1.9217</td><td>0.000432227</td><td>3.69294</td><td>[-1.92302, -1.92039]</td></tr><tr><td>merge-3</td><td>3</td><td>2</td><td>0.130674</td><td>-1.86933</td><td>0.000804912</td><td>3.49438</td><td>[-1.87178, -1.86688]</td></tr></tbody></table></div><svg class="chart" viewBox="0 0 1000 216" role="img" aria-label="MSE by selected stage group"><text x="22" y="26" fill="#536976" font-size="13">Empirical mean squared error · axis begins at zero</text><text x="22" y="66" font-size="15" fill="#172a36">merge-1</text><rect x="205" y="45" width="660.000" height="30" rx="3" fill="#215e78"/><text x="875.000" y="66" font-size="14" fill="#172a36">3.93811</text><text x="22" y="118" font-size="15" fill="#172a36">merge-2</text><rect x="205" y="97" width="618.912" height="30" rx="3" fill="#215e78"/><text x="833.912" y="118" font-size="14" fill="#172a36">3.69294</text><text x="22" y="170" font-size="15" fill="#172a36">merge-3</text><rect x="205" y="149" width="585.634" height="30" rx="3" fill="#215e78"/><text x="800.634" y="170" font-size="14" fill="#172a36">3.49438</text></svg><p class="caption">Signed bias = mean(estimate − truth). Std uses ddof=0. MSE = mean((estimate − truth)²). Bias intervals use a Student-t critical value and the sample standard error of the errors. MSE intervals (in the detailed metrics) use a normal approximation, clipped at zero. With fewer than two repetitions, intervals are unavailable.</p><details><summary>Exact metrics and uncertainty</summary><pre>[
+  {
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 0.015533347924550375,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -1.9844666520754497,
+    &quot;std&quot;: 8.066979226970252e-05,
+    &quot;mse&quot;: 3.938107899707159,
+    &quot;bias_mcse&quot;: 5.704215715081678e-05,
+    &quot;mse_mcse&quot;: 0.00022639661756506361,
+    &quot;bias_ci95&quot;: [
+      -1.9847120846686224,
+      -1.984221219482277
+    ],
+    &quot;mse_ci95&quot;: [
+      3.9376641623367314,
+      3.9385516370775866
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 0.07829682032267253,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -1.9217031796773274,
+    &quot;std&quot;: 0.0004322267501537379,
+    &quot;mse&quot;: 3.6929432976019143,
+    &quot;bias_mcse&quot;: 0.0003056304660439318,
+    &quot;mse_mcse&quot;: 0.0011747058879669596,
+    &quot;bias_ci95&quot;: [
+      -1.9230182014363297,
+      -1.920388157918325
+    ],
+    &quot;mse_ci95&quot;: [
+      3.690640874061499,
+      3.6952457211423297
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 0.13067380587259927,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -1.8693261941274006,
+    &quot;std&quot;: 0.0008049118888480513,
+    &quot;mse&quot;: 3.4943810679339813,
+    &quot;bias_mcse&quot;: 0.0005691586548621296,
+    &quot;mse_mcse&quot;: 0.002127835150840598,
+    &quot;bias_ci95&quot;: [
+      -1.8717750861673734,
+      -1.8668773020874279
+    ],
+    &quot;mse_ci95&quot;: [
+      3.4902105110383337,
+      3.498551624829629
+    ]
+  }
+]</pre></details></section><section><h2>Methods, provenance and diagnostics</h2><p>Node IDs are sorted once and shared by adjacency, treatment, features and responses. Graphs must be simple, unweighted and have no isolated nodes. Two-hop interference uses Wz + r₂[W(Wz) − diag(W²)z], with W = D⁻¹A; the diagonal removes closed walks without constructing a dense squared adjacency. True GATE is computed by averaging the noise-free global-treatment and global-control outcomes on the evaluation graph.</p><p>OLS fits an intercept and treatment on pooled observations. GNN uses three DGL ChebConv layers (2→16, K=2), (16→16, K=1), (16→1, K=1), ReLU, degree and treatment features, and Adam with betas (0.9, 0.999). Each epoch steps the optimizer through the selected stages in order, using each stage’s own graph. No held-out predictive test set or model-selection search is used.</p><p>Dynamic graphs are fixed across repetitions and evolve independently of treatment: each node at or above the degree median gets five candidate neighbors drawn with replacement proportional to current degree; loops and existing edges are discarded. Initial cluster membership stays fixed. Recorded edge counts are realized values, not a promise to match historical notebook RNG output.</p><pre>{
+  &quot;source&quot;: {
+    &quot;name&quot;: &quot;synthetic Watts-Strogatz&quot;,
+    &quot;nodes&quot;: 60,
+    &quot;degree&quot;: 6,
+    &quot;rewire&quot;: 0.2,
+    &quot;graph_seed&quot;: 0
+  },
+  &quot;graph&quot;: {
+    &quot;nodes&quot;: 60,
+    &quot;edges&quot;: 180,
+    &quot;clusters&quot;: null,
+    &quot;minimum_degree&quot;: 4.0,
+    &quot;maximum_degree&quot;: 8.0,
+    &quot;stage_edges&quot;: [
+      180,
+      180,
+      180
+    ],
+    &quot;node_order&quot;: &quot;sorted original IDs&quot;
+  },
+  &quot;versions&quot;: {
+    &quot;rampup&quot;: &quot;0.1.0&quot;,
+    &quot;python&quot;: &quot;3.11.13&quot;,
+    &quot;numpy&quot;: &quot;1.26.4&quot;,
+    &quot;scipy&quot;: &quot;1.16.0&quot;,
+    &quot;networkx&quot;: &quot;3.4.2&quot;,
+    &quot;torch&quot;: &quot;2.3.1&quot;,
+    &quot;dgl&quot;: &quot;2.3.0&quot;
+  },
+  &quot;git&quot;: {
+    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+    &quot;dirty&quot;: true
+  },
+  &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
+}</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;seed&quot;: [
+      2026,
+      0
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.012639343584656086,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.03328120118417737,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.0372826987276392,
+        &quot;edges&quot;: 180
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;seed&quot;: [
+      2026,
+      1
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.01519234182098765,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.034506936177248676,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.06268988213340891,
+        &quot;edges&quot;: 180
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;seed&quot;: [
+      2026,
+      2
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.1,
+        &quot;treated_entities&quot;: 6,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.009804539871504153,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 15,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.02292243441358024,
+        &quot;edges&quot;: 180
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 30,
+        &quot;entity_count&quot;: 60,
+        &quot;exposure_variance&quot;: 0.04174056555492568,
+        &quot;edges&quot;: 180
+      }
+    ]
+  }
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+  {
+    &quot;started_at&quot;: &quot;2026-09-27T06:59:23+00:00&quot;,
+    &quot;resume&quot;: false,
+    &quot;status&quot;: &quot;complete&quot;,
+    &quot;completed_this_attempt&quot;: 3,
+    &quot;finished_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 3.658088
+  }
+]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 0.015631556510925293,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 2.312741994857788
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.07839584350585938,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.46433061361312866
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.12971949577331543,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.40068477392196655
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 0.015534520149230957,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 2.441075325012207
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.07772493362426758,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.5490331798791885
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.13168835639953613,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.46048665046691895
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: 0.015433967113494873,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 2.326810359954834
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.07876968383789062,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.506547749042511
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.1306135654449463,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.4360872010389964
+  }
+]</pre></details><h3>Machine-readable handoff</h3><pre id="handoff-synthetic-gnn">{
+  &quot;study_id&quot;: &quot;synthetic-gnn&quot;,
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;frozen_claim&quot;: &quot;Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.&quot;,
+  &quot;outcome_access&quot;: &quot;validated_completed_records_read&quot;,
+  &quot;expected_repetitions&quot;: 3,
+  &quot;completed_repetitions&quot;: 3,
+  &quot;validated_estimate_count&quot;: 9,
+  &quot;key_metrics&quot;: [
+    {
+      &quot;group&quot;: &quot;merge-1&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 0.015533347924550375,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -1.9844666520754497,
+      &quot;std&quot;: 8.066979226970252e-05,
+      &quot;mse&quot;: 3.938107899707159,
+      &quot;bias_mcse&quot;: 5.704215715081678e-05,
+      &quot;mse_mcse&quot;: 0.00022639661756506361,
+      &quot;bias_ci95&quot;: [
+        -1.9847120846686224,
+        -1.984221219482277
+      ],
+      &quot;mse_ci95&quot;: [
+        3.9376641623367314,
+        3.9385516370775866
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-2&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 0.07829682032267253,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -1.9217031796773274,
+      &quot;std&quot;: 0.0004322267501537379,
+      &quot;mse&quot;: 3.6929432976019143,
+      &quot;bias_mcse&quot;: 0.0003056304660439318,
+      &quot;mse_mcse&quot;: 0.0011747058879669596,
+      &quot;bias_ci95&quot;: [
+        -1.9230182014363297,
+        -1.920388157918325
+      ],
+      &quot;mse_ci95&quot;: [
+        3.690640874061499,
+        3.6952457211423297
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-3&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 0.13067380587259927,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -1.8693261941274006,
+      &quot;std&quot;: 0.0008049118888480513,
+      &quot;mse&quot;: 3.4943810679339813,
+      &quot;bias_mcse&quot;: 0.0005691586548621296,
+      &quot;mse_mcse&quot;: 0.002127835150840598,
+      &quot;bias_ci95&quot;: [
+        -1.8717750861673734,
+        -1.8668773020874279
+      ],
+      &quot;mse_ci95&quot;: [
+        3.4902105110383337,
+        3.498551624829629
+      ]
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.&quot;,
+    &quot;A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.&quot;,
+    &quot;Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.&quot;,
+    &quot;Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.&quot;,
+    &quot;GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.&quot;
+  ],
+  &quot;next_authorized_step&quot;: &quot;Inspect configuration and diagnostics before a full replication run; do not infer unrun paper outcomes.&quot;
+}</pre></section><footer>Standalone report · No external scripts, fonts, styles or images · Generated from validated experiment artifacts</footer></details><details><summary>synthetic-dynamic-gnn — complete embedded experiment report</summary><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Reproducible experiments</div><h1>Ramp-up experiment report</h1><span class="pill ">COMPLETE</span><span class="pill">GNN · dynamic</span><p class="lede">Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.</p></header><section><h2>Execution outcome</h2><p>Run <code>synthetic-dynamic-gnn</code> contains 2 validated complete repetitions out of 2 requested, producing 6 estimates. Status is derived from both the execution record and the available checkpoints.</p><div class="metrics"><div class="metric"><strong>2</strong><span>Complete repetitions</span></div><div class="metric"><strong>6</strong><span>Estimate records</span></div><div class="metric"><strong>60</strong><span>Graph nodes</span></div><div class="metric"><strong>180</strong><span>Initial edges</span></div></div></section><section><h2>Objective and experimental design</h2><p>GATE is the difference between mean potential outcomes under global treatment and global control. The study examines whether training a regression model on multiple treatment proportions improves this extrapolation under network interference. These runs quantify configured scenarios; no automatic hypothesis acceptance gate is imposed.</p><p>Design reference: the supplied NeurIPS 2026 manuscript, <em>Just Ramp-Up: Debiasing Regression-based Estimator for A/B Tests under Network Interference</em>, simulation study and detailed-experiment appendices. The linked preprint may retain its earlier title: <a href="https://arxiv.org/abs/2410.12740">arXiv:2410.12740</a>.</p><p>Each repetition has independent assignment and noise random streams derived from its root seed and repetition ID. Stages are generated once and reused across merge groups. Complete randomization selects floor(p × entity count) entities; cluster assignments preserve membership. A one-entity baseline differs from exact global control. The latest selected stage supplies the graph used for counterfactual evaluation.</p><h3>Frozen configuration</h3><pre>{
+  &quot;dataset&quot;: &quot;demo&quot;,
+  &quot;outcome&quot;: &quot;dynamic&quot;,
+  &quot;level&quot;: &quot;cluster&quot;,
+  &quot;randomization&quot;: &quot;complete&quot;,
+  &quot;temporal&quot;: &quot;staggered&quot;,
+  &quot;merge&quot;: &quot;suffix&quot;,
+  &quot;baseline&quot;: &quot;one&quot;,
+  &quot;stages&quot;: [
+    0.1,
+    0.25,
+    0.5
+  ],
+  &quot;estimator&quot;: &quot;gnn&quot;,
+  &quot;repetitions&quot;: 2,
+  &quot;seed&quot;: 2026,
+  &quot;graph_seed&quot;: 0,
+  &quot;cluster_seed&quot;: 10,
+  &quot;model_seed&quot;: 2,
+  &quot;resolution&quot;: 10.0,
+  &quot;epochs&quot;: 4,
+  &quot;learning_rate&quot;: 0.004,
+  &quot;threads&quot;: 1,
+  &quot;alpha&quot;: 1.0,
+  &quot;beta&quot;: 1.0,
+  &quot;gamma&quot;: 1.0,
+  &quot;sigma&quot;: 0.1,
+  &quot;r2&quot;: 0.5,
+  &quot;purpose&quot;: &quot;smoke&quot;
+}</pre><h3>Selected stage groups and graph-specific truth</h3><pre>[
+  {
+    &quot;label&quot;: &quot;merge-1&quot;,
+    &quot;indices&quot;: [
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;merge-2&quot;,
+    &quot;indices&quot;: [
+      1,
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;merge-3&quot;,
+    &quot;indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  }
+]</pre></section><section><h2>Results and Monte Carlo uncertainty</h2><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>2</td><td>2</td><td>-0.00765914</td><td>-2.00766</td><td>0.00019592</td><td>4.0307</td><td>[-2.01015, -2.00517]</td></tr><tr><td>merge-2</td><td>2</td><td>2</td><td>0.0105729</td><td>-1.98943</td><td>0.000322402</td><td>3.95782</td><td>[-1.99352, -1.98533]</td></tr><tr><td>merge-3</td><td>2</td><td>2</td><td>0.024949</td><td>-1.97505</td><td>0.000660062</td><td>3.90083</td><td>[-1.98344, -1.96666]</td></tr></tbody></table></div><svg class="chart" viewBox="0 0 1000 216" role="img" aria-label="MSE by selected stage group"><text x="22" y="26" fill="#536976" font-size="13">Empirical mean squared error · axis begins at zero</text><text x="22" y="66" font-size="15" fill="#172a36">merge-1</text><rect x="205" y="45" width="660.000" height="30" rx="3" fill="#215e78"/><text x="875.000" y="66" font-size="14" fill="#172a36">4.0307</text><text x="22" y="118" font-size="15" fill="#172a36">merge-2</text><rect x="205" y="97" width="648.067" height="30" rx="3" fill="#215e78"/><text x="863.067" y="118" font-size="14" fill="#172a36">3.95782</text><text x="22" y="170" font-size="15" fill="#172a36">merge-3</text><rect x="205" y="149" width="638.735" height="30" rx="3" fill="#215e78"/><text x="853.735" y="170" font-size="14" fill="#172a36">3.90083</text></svg><p class="caption">Signed bias = mean(estimate − truth). Std uses ddof=0. MSE = mean((estimate − truth)²). Bias intervals use a Student-t critical value and the sample standard error of the errors. MSE intervals (in the detailed metrics) use a normal approximation, clipped at zero. With fewer than two repetitions, intervals are unavailable.</p><details><summary>Exact metrics and uncertainty</summary><pre>[
+  {
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;n&quot;: 2,
+    &quot;mean_estimate&quot;: -0.00765913724899292,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -2.007659137248993,
+    &quot;std&quot;: 0.00019592046737670898,
+    &quot;mse&quot;: 4.0306952497642,
+    &quot;bias_mcse&quot;: 0.00019592046737670898,
+    &quot;mse_mcse&quot;: 0.000786683033005886,
+    &quot;bias_ci95&quot;: [
+      -2.0101485428195387,
+      -2.005169731678447
+    ],
+    &quot;mse_ci95&quot;: [
+      4.0291533510195086,
+      4.032237148508892
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;n&quot;: 2,
+    &quot;mean_estimate&quot;: 0.010572850704193115,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -1.9894271492958069,
+    &quot;std&quot;: 0.0003224015235900879,
+    &quot;mse&quot;: 3.957820486297983,
+    &quot;bias_mcse&quot;: 0.0003224015235900879,
+    &quot;mse_mcse&quot;: 0.0012827886880089066,
+    &quot;bias_ci95&quot;: [
+      -1.9935236490618802,
+      -1.9853306495297336
+    ],
+    &quot;mse_ci95&quot;: [
+      3.9553062204694855,
+      3.9603347521264807
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;n&quot;: 2,
+    &quot;mean_estimate&quot;: 0.024948954582214355,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -1.9750510454177856,
+    &quot;std&quot;: 0.0006600618362426758,
+    &quot;mse&quot;: 3.9008270676875156,
+    &quot;bias_mcse&quot;: 0.0006600618362426757,
+    &quot;mse_mcse&quot;: 0.0026073116394229596,
+    &quot;bias_ci95&quot;: [
+      -1.9834379262477904,
+      -1.966664164587781
+    ],
+    &quot;mse_ci95&quot;: [
+      3.8957167368742467,
+      3.9059373985007846
+    ]
+  }
+]</pre></details></section><section><h2>Methods, provenance and diagnostics</h2><p>Node IDs are sorted once and shared by adjacency, treatment, features and responses. Graphs must be simple, unweighted and have no isolated nodes. Two-hop interference uses Wz + r₂[W(Wz) − diag(W²)z], with W = D⁻¹A; the diagonal removes closed walks without constructing a dense squared adjacency. True GATE is computed by averaging the noise-free global-treatment and global-control outcomes on the evaluation graph.</p><p>OLS fits an intercept and treatment on pooled observations. GNN uses three DGL ChebConv layers (2→16, K=2), (16→16, K=1), (16→1, K=1), ReLU, degree and treatment features, and Adam with betas (0.9, 0.999). Each epoch steps the optimizer through the selected stages in order, using each stage’s own graph. No held-out predictive test set or model-selection search is used.</p><p>Dynamic graphs are fixed across repetitions and evolve independently of treatment: each node at or above the degree median gets five candidate neighbors drawn with replacement proportional to current degree; loops and existing edges are discarded. Initial cluster membership stays fixed. Recorded edge counts are realized values, not a promise to match historical notebook RNG output.</p><pre>{
+  &quot;source&quot;: {
+    &quot;name&quot;: &quot;synthetic Watts-Strogatz&quot;,
+    &quot;nodes&quot;: 60,
+    &quot;degree&quot;: 6,
+    &quot;rewire&quot;: 0.2,
+    &quot;graph_seed&quot;: 0
+  },
+  &quot;graph&quot;: {
+    &quot;nodes&quot;: 60,
+    &quot;edges&quot;: 180,
+    &quot;clusters&quot;: 36,
+    &quot;minimum_degree&quot;: 4.0,
+    &quot;maximum_degree&quot;: 8.0,
+    &quot;stage_edges&quot;: [
+      349,
+      472,
+      555
+    ],
+    &quot;node_order&quot;: &quot;sorted original IDs&quot;
+  },
+  &quot;versions&quot;: {
+    &quot;rampup&quot;: &quot;0.1.0&quot;,
+    &quot;python&quot;: &quot;3.11.13&quot;,
+    &quot;numpy&quot;: &quot;1.26.4&quot;,
+    &quot;scipy&quot;: &quot;1.16.0&quot;,
+    &quot;networkx&quot;: &quot;3.4.2&quot;,
+    &quot;torch&quot;: &quot;2.3.1&quot;,
+    &quot;dgl&quot;: &quot;2.3.0&quot;
+  },
+  &quot;git&quot;: {
+    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+    &quot;dirty&quot;: true
+  },
+  &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
+}</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;seed&quot;: [
+      2026,
+      0
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 5,
+        &quot;unit_proportion&quot;: 0.08333333333333333,
+        &quot;treated_entities&quot;: 3,
+        &quot;entity_count&quot;: 36,
+        &quot;exposure_variance&quot;: 0.006465314910786773,
+        &quot;edges&quot;: 349
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 15,
+        &quot;unit_proportion&quot;: 0.25,
+        &quot;treated_entities&quot;: 9,
+        &quot;entity_count&quot;: 36,
+        &quot;exposure_variance&quot;: 0.016543922528294185,
+        &quot;edges&quot;: 472
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 30,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 18,
+        &quot;entity_count&quot;: 36,
+        &quot;exposure_variance&quot;: 0.016836611227978842,
+        &quot;edges&quot;: 555
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;seed&quot;: [
+      2026,
+      1
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 3,
+        &quot;unit_proportion&quot;: 0.05,
+        &quot;treated_entities&quot;: 3,
+        &quot;entity_count&quot;: 36,
+        &quot;exposure_variance&quot;: 0.004019764749126956,
+        &quot;edges&quot;: 349
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 16,
+        &quot;unit_proportion&quot;: 0.26666666666666666,
+        &quot;treated_entities&quot;: 9,
+        &quot;entity_count&quot;: 36,
+        &quot;exposure_variance&quot;: 0.01473563955012623,
+        &quot;edges&quot;: 472
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 36,
+        &quot;unit_proportion&quot;: 0.6,
+        &quot;treated_entities&quot;: 18,
+        &quot;entity_count&quot;: 36,
+        &quot;exposure_variance&quot;: 0.013159402167397308,
+        &quot;edges&quot;: 555
+      }
+    ]
+  }
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+  {
+    &quot;started_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
+    &quot;resume&quot;: false,
+    &quot;status&quot;: &quot;complete&quot;,
+    &quot;completed_this_attempt&quot;: 2,
+    &quot;finished_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 0.073987
+  }
+]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: -0.007463216781616211,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 1.3091700077056885
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.010895252227783203,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.437060222029686
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.02560901641845703,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.46001289784908295
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      2
+    ],
+    &quot;estimate&quot;: -0.007855057716369629,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 1.7685796022415161
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.010250449180603027,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.5870082974433899
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2
+    ],
+    &quot;estimate&quot;: 0.02428889274597168,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.5189975053071976
+  }
+]</pre></details><h3>Machine-readable handoff</h3><pre id="handoff-synthetic-dynamic-gnn">{
+  &quot;study_id&quot;: &quot;synthetic-dynamic-gnn&quot;,
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;frozen_claim&quot;: &quot;Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.&quot;,
+  &quot;outcome_access&quot;: &quot;validated_completed_records_read&quot;,
+  &quot;expected_repetitions&quot;: 2,
+  &quot;completed_repetitions&quot;: 2,
+  &quot;validated_estimate_count&quot;: 6,
+  &quot;key_metrics&quot;: [
+    {
+      &quot;group&quot;: &quot;merge-1&quot;,
+      &quot;n&quot;: 2,
+      &quot;mean_estimate&quot;: -0.00765913724899292,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -2.007659137248993,
+      &quot;std&quot;: 0.00019592046737670898,
+      &quot;mse&quot;: 4.0306952497642,
+      &quot;bias_mcse&quot;: 0.00019592046737670898,
+      &quot;mse_mcse&quot;: 0.000786683033005886,
+      &quot;bias_ci95&quot;: [
+        -2.0101485428195387,
+        -2.005169731678447
+      ],
+      &quot;mse_ci95&quot;: [
+        4.0291533510195086,
+        4.032237148508892
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-2&quot;,
+      &quot;n&quot;: 2,
+      &quot;mean_estimate&quot;: 0.010572850704193115,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -1.9894271492958069,
+      &quot;std&quot;: 0.0003224015235900879,
+      &quot;mse&quot;: 3.957820486297983,
+      &quot;bias_mcse&quot;: 0.0003224015235900879,
+      &quot;mse_mcse&quot;: 0.0012827886880089066,
+      &quot;bias_ci95&quot;: [
+        -1.9935236490618802,
+        -1.9853306495297336
+      ],
+      &quot;mse_ci95&quot;: [
+        3.9553062204694855,
+        3.9603347521264807
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-3&quot;,
+      &quot;n&quot;: 2,
+      &quot;mean_estimate&quot;: 0.024948954582214355,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -1.9750510454177856,
+      &quot;std&quot;: 0.0006600618362426758,
+      &quot;mse&quot;: 3.9008270676875156,
+      &quot;bias_mcse&quot;: 0.0006600618362426757,
+      &quot;mse_mcse&quot;: 0.0026073116394229596,
+      &quot;bias_ci95&quot;: [
+        -1.9834379262477904,
+        -1.966664164587781
+      ],
+      &quot;mse_ci95&quot;: [
+        3.8957167368742467,
+        3.9059373985007846
+      ]
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.&quot;,
+    &quot;A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.&quot;,
+    &quot;Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.&quot;,
+    &quot;Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.&quot;,
+    &quot;GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.&quot;
+  ],
+  &quot;next_authorized_step&quot;: &quot;Inspect configuration and diagnostics before a full replication run; do not infer unrun paper outcomes.&quot;
+}</pre></section><footer>Standalone report · No external scripts, fonts, styles or images · Generated from validated experiment artifacts</footer></details><details><summary>stanford-two-hop-ols — complete embedded experiment report</summary><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Reproducible experiments</div><h1>Ramp-up experiment report</h1><span class="pill ">COMPLETE</span><span class="pill">OLS · two_hop</span><p class="lede">Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.</p></header><section><h2>Execution outcome</h2><p>Run <code>stanford-two-hop-ols</code> contains 3 validated complete repetitions out of 3 requested, producing 15 estimates. Status is derived from both the execution record and the available checkpoints.</p><div class="metrics"><div class="metric"><strong>3</strong><span>Complete repetitions</span></div><div class="metric"><strong>15</strong><span>Estimate records</span></div><div class="metric"><strong>11586</strong><span>Graph nodes</span></div><div class="metric"><strong>568309</strong><span>Initial edges</span></div></div></section><section><h2>Objective and experimental design</h2><p>GATE is the difference between mean potential outcomes under global treatment and global control. The study examines whether training a regression model on multiple treatment proportions improves this extrapolation under network interference. These runs quantify configured scenarios; no automatic hypothesis acceptance gate is imposed.</p><p>Design reference: the supplied NeurIPS 2026 manuscript, <em>Just Ramp-Up: Debiasing Regression-based Estimator for A/B Tests under Network Interference</em>, simulation study and detailed-experiment appendices. The linked preprint may retain its earlier title: <a href="https://arxiv.org/abs/2410.12740">arXiv:2410.12740</a>.</p><p>Each repetition has independent assignment and noise random streams derived from its root seed and repetition ID. Stages are generated once and reused across merge groups. Complete randomization selects floor(p × entity count) entities; cluster assignments preserve membership. A one-entity baseline differs from exact global control. The latest selected stage supplies the graph used for counterfactual evaluation.</p><h3>Frozen configuration</h3><pre>{
+  &quot;dataset&quot;: &quot;socfb-Stanford3.mtx&quot;,
+  &quot;outcome&quot;: &quot;two_hop&quot;,
+  &quot;level&quot;: &quot;unit&quot;,
+  &quot;randomization&quot;: &quot;complete&quot;,
+  &quot;temporal&quot;: &quot;staggered&quot;,
+  &quot;merge&quot;: &quot;suffix&quot;,
+  &quot;baseline&quot;: &quot;one&quot;,
+  &quot;stages&quot;: [
+    0.02,
+    0.05,
+    0.1,
+    0.25,
+    0.5
+  ],
+  &quot;estimator&quot;: &quot;ols&quot;,
+  &quot;repetitions&quot;: 3,
+  &quot;seed&quot;: 2026,
+  &quot;graph_seed&quot;: 0,
+  &quot;cluster_seed&quot;: 10,
+  &quot;model_seed&quot;: 2,
+  &quot;resolution&quot;: 10.0,
+  &quot;epochs&quot;: 400,
+  &quot;learning_rate&quot;: 0.004,
+  &quot;threads&quot;: 1,
+  &quot;alpha&quot;: 1.0,
+  &quot;beta&quot;: 1.0,
+  &quot;gamma&quot;: 1.0,
+  &quot;sigma&quot;: 0.1,
+  &quot;r2&quot;: 0.5,
+  &quot;purpose&quot;: &quot;smoke&quot;
+}</pre><h3>Selected stage groups and graph-specific truth</h3><pre>[
+  {
+    &quot;label&quot;: &quot;merge-1&quot;,
+    &quot;indices&quot;: [
+      4
+    ],
+    &quot;truth&quot;: 2.4890978987893417
+  },
+  {
+    &quot;label&quot;: &quot;merge-2&quot;,
+    &quot;indices&quot;: [
+      3,
+      4
+    ],
+    &quot;truth&quot;: 2.4890978987893417
+  },
+  {
+    &quot;label&quot;: &quot;merge-3&quot;,
+    &quot;indices&quot;: [
+      2,
+      3,
+      4
+    ],
+    &quot;truth&quot;: 2.4890978987893417
+  },
+  {
+    &quot;label&quot;: &quot;merge-4&quot;,
+    &quot;indices&quot;: [
+      1,
+      2,
+      3,
+      4
+    ],
+    &quot;truth&quot;: 2.4890978987893417
+  },
+  {
+    &quot;label&quot;: &quot;merge-5&quot;,
+    &quot;indices&quot;: [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    &quot;truth&quot;: 2.4890978987893417
+  }
+]</pre></section><section><h2>Results and Monte Carlo uncertainty</h2><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>3</td><td>2.4891</td><td>0.998772</td><td>-1.49033</td><td>0.00281593</td><td>2.22108</td><td>[-1.49889, -1.48176]</td></tr><tr><td>merge-2</td><td>3</td><td>2.4891</td><td>1.09951</td><td>-1.38959</td><td>0.00221658</td><td>1.93096</td><td>[-1.39633, -1.38284]</td></tr><tr><td>merge-3</td><td>3</td><td>2.4891</td><td>1.20096</td><td>-1.28814</td><td>0.00260038</td><td>1.65931</td><td>[-1.29605, -1.28023]</td></tr><tr><td>merge-4</td><td>3</td><td>2.4891</td><td>1.26297</td><td>-1.22613</td><td>0.00276386</td><td>1.5034</td><td>[-1.23454, -1.21772]</td></tr><tr><td>merge-5</td><td>3</td><td>2.4891</td><td>1.31134</td><td>-1.17776</td><td>0.00291521</td><td>1.38713</td><td>[-1.18663, -1.16889]</td></tr></tbody></table></div><svg class="chart" viewBox="0 0 1000 320" role="img" aria-label="MSE by selected stage group"><text x="22" y="26" fill="#536976" font-size="13">Empirical mean squared error · axis begins at zero</text><text x="22" y="66" font-size="15" fill="#172a36">merge-1</text><rect x="205" y="45" width="660.000" height="30" rx="3" fill="#215e78"/><text x="875.000" y="66" font-size="14" fill="#172a36">2.22108</text><text x="22" y="118" font-size="15" fill="#172a36">merge-2</text><rect x="205" y="97" width="573.790" height="30" rx="3" fill="#215e78"/><text x="788.790" y="118" font-size="14" fill="#172a36">1.93096</text><text x="22" y="170" font-size="15" fill="#172a36">merge-3</text><rect x="205" y="149" width="493.070" height="30" rx="3" fill="#215e78"/><text x="708.070" y="170" font-size="14" fill="#172a36">1.65931</text><text x="22" y="222" font-size="15" fill="#172a36">merge-4</text><rect x="205" y="201" width="446.739" height="30" rx="3" fill="#215e78"/><text x="661.739" y="222" font-size="14" fill="#172a36">1.5034</text><text x="22" y="274" font-size="15" fill="#172a36">merge-5</text><rect x="205" y="253" width="412.189" height="30" rx="3" fill="#215e78"/><text x="627.189" y="274" font-size="14" fill="#172a36">1.38713</text></svg><p class="caption">Signed bias = mean(estimate − truth). Std uses ddof=0. MSE = mean((estimate − truth)²). Bias intervals use a Student-t critical value and the sample standard error of the errors. MSE intervals (in the detailed metrics) use a normal approximation, clipped at zero. With fewer than two repetitions, intervals are unavailable.</p><details><summary>Exact metrics and uncertainty</summary><pre>[
+  {
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 0.9987721790717785,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;bias&quot;: -1.4903257197175632,
+    &quot;std&quot;: 0.002815925019664697,
+    &quot;mse&quot;: 2.2210786802853892,
+    &quot;bias_mcse&quot;: 0.0019911596767177692,
+    &quot;mse_mcse&quot;: 0.005932631066180993,
+    &quot;bias_ci95&quot;: [
+      -1.4988929883358537,
+      -1.4817584510992727
+    ],
+    &quot;mse_ci95&quot;: [
+      2.2094507233956744,
+      2.232706637175104
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 1.099509794108035,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;bias&quot;: -1.3895881046813068,
+    &quot;std&quot;: 0.0022165821671498945,
+    &quot;mse&quot;: 1.9309600139082894,
+    &quot;bias_mcse&quot;: 0.0015673602814488638,
+    &quot;mse_mcse&quot;: 0.004353557007432586,
+    &quot;bias_ci95&quot;: [
+      -1.3963319116747,
+      -1.3828442976879136
+    ],
+    &quot;mse_ci95&quot;: [
+      1.9224270421737215,
+      1.9394929856428573
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 1.2009565846598307,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;bias&quot;: -1.288141314129511,
+    &quot;std&quot;: 0.002600376491369637,
+    &quot;mse&quot;: 1.6593148071252009,
+    &quot;bias_mcse&quot;: 0.0018387438506855523,
+    &quot;mse_mcse&quot;: 0.004734238639635038,
+    &quot;bias_ci95&quot;: [
+      -1.2960527903778751,
+      -1.280229837881147
+    ],
+    &quot;mse_ci95&quot;: [
+      1.6500356993915162,
+      1.6685939148588855
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-4&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 1.2629703851066314,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;bias&quot;: -1.2261275136827103,
+    &quot;std&quot;: 0.0027638630763477975,
+    &quot;mse&quot;: 1.50339631874885,
+    &quot;bias_mcse&quot;: 0.0019543463235566403,
+    &quot;mse_mcse&quot;: 0.0047907874080958665,
+    &quot;bias_ci95&quot;: [
+      -1.234536387226533,
+      -1.2177186401388878
+    ],
+    &quot;mse_ci95&quot;: [
+      1.494006375428982,
+      1.5127862620687178
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;merge-5&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 1.311338367822465,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;bias&quot;: -1.1777595309668767,
+    &quot;std&quot;: 0.0029152071433496203,
+    &quot;mse&quot;: 1.3871260112160064,
+    &quot;bias_mcse&quot;: 0.0020613627396259804,
+    &quot;mse_mcse&quot;: 0.004854392019784921,
+    &quot;bias_ci95&quot;: [
+      -1.1866288589854224,
+      -1.168890202948331
+    ],
+    &quot;mse_ci95&quot;: [
+      1.377611402857228,
+      1.396640619574785
+    ]
+  }
+]</pre></details></section><section><h2>Methods, provenance and diagnostics</h2><p>Node IDs are sorted once and shared by adjacency, treatment, features and responses. Graphs must be simple, unweighted and have no isolated nodes. Two-hop interference uses Wz + r₂[W(Wz) − diag(W²)z], with W = D⁻¹A; the diagonal removes closed walks without constructing a dense squared adjacency. True GATE is computed by averaging the noise-free global-treatment and global-control outcomes on the evaluation graph.</p><p>OLS fits an intercept and treatment on pooled observations. GNN uses three DGL ChebConv layers (2→16, K=2), (16→16, K=1), (16→1, K=1), ReLU, degree and treatment features, and Adam with betas (0.9, 0.999). Each epoch steps the optimizer through the selected stages in order, using each stage’s own graph. No held-out predictive test set or model-selection search is used.</p><p>Dynamic graphs are fixed across repetitions and evolve independently of treatment: each node at or above the degree median gets five candidate neighbors drawn with replacement proportional to current degree; loops and existing edges are discarded. Initial cluster membership stays fixed. Recorded edge counts are realized values, not a promise to match historical notebook RNG output.</p><pre>{
+  &quot;source&quot;: {
+    &quot;name&quot;: &quot;socfb-Stanford3.mtx&quot;,
+    &quot;size_bytes&quot;: 5737609,
+    &quot;mtime_ns&quot;: 1790490446112189700
+  },
+  &quot;graph&quot;: {
+    &quot;nodes&quot;: 11586,
+    &quot;edges&quot;: 568309,
+    &quot;clusters&quot;: null,
+    &quot;minimum_degree&quot;: 1.0,
+    &quot;maximum_degree&quot;: 1172.0,
+    &quot;stage_edges&quot;: [
+      568309,
+      568309,
+      568309,
+      568309,
+      568309
+    ],
+    &quot;node_order&quot;: &quot;sorted original IDs&quot;
+  },
+  &quot;versions&quot;: {
+    &quot;rampup&quot;: &quot;0.1.0&quot;,
+    &quot;python&quot;: &quot;3.11.13&quot;,
+    &quot;numpy&quot;: &quot;1.26.4&quot;,
+    &quot;scipy&quot;: &quot;1.16.0&quot;,
+    &quot;networkx&quot;: &quot;3.4.2&quot;
+  },
+  &quot;git&quot;: {
+    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+    &quot;dirty&quot;: true
+  },
+  &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
+}</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;seed&quot;: [
+      2026,
+      0
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.02,
+        &quot;treated_units&quot;: 231,
+        &quot;unit_proportion&quot;: 0.01993785603314345,
+        &quot;treated_entities&quot;: 231,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.0020118459151339976,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.05,
+        &quot;treated_units&quot;: 579,
+        &quot;unit_proportion&quot;: 0.049974106680476436,
+        &quot;treated_entities&quot;: 579,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.004216899337307948,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 1158,
+        &quot;unit_proportion&quot;: 0.09994821336095287,
+        &quot;treated_entities&quot;: 1158,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.007955176872990799,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 3,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 2896,
+        &quot;unit_proportion&quot;: 0.24995684446746072,
+        &quot;treated_entities&quot;: 2896,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.018025744067571684,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 4,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 5793,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 5793,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.023433192988764198,
+        &quot;edges&quot;: 568309
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;seed&quot;: [
+      2026,
+      1
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.02,
+        &quot;treated_units&quot;: 231,
+        &quot;unit_proportion&quot;: 0.01993785603314345,
+        &quot;treated_entities&quot;: 231,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.001794292868822947,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.05,
+        &quot;treated_units&quot;: 579,
+        &quot;unit_proportion&quot;: 0.049974106680476436,
+        &quot;treated_entities&quot;: 579,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.004383538721205625,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 1158,
+        &quot;unit_proportion&quot;: 0.09994821336095287,
+        &quot;treated_entities&quot;: 1158,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.008294669909039461,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 3,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 2896,
+        &quot;unit_proportion&quot;: 0.24995684446746072,
+        &quot;treated_entities&quot;: 2896,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.01741065499787095,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 4,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 5793,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 5793,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.02328118071464181,
+        &quot;edges&quot;: 568309
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;seed&quot;: [
+      2026,
+      2
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.02,
+        &quot;treated_units&quot;: 231,
+        &quot;unit_proportion&quot;: 0.01993785603314345,
+        &quot;treated_entities&quot;: 231,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.0020106650340990843,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.05,
+        &quot;treated_units&quot;: 579,
+        &quot;unit_proportion&quot;: 0.049974106680476436,
+        &quot;treated_entities&quot;: 579,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.0052309208655976335,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 1158,
+        &quot;unit_proportion&quot;: 0.09994821336095287,
+        &quot;treated_entities&quot;: 1158,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.009255763733947844,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 3,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 2896,
+        &quot;unit_proportion&quot;: 0.24995684446746072,
+        &quot;treated_entities&quot;: 2896,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.018743830257386077,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 4,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 5793,
+        &quot;unit_proportion&quot;: 0.5,
+        &quot;treated_entities&quot;: 5793,
+        &quot;entity_count&quot;: 11586,
+        &quot;exposure_variance&quot;: 0.023127533311788358,
+        &quot;edges&quot;: 568309
+      }
+    ]
+  }
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+  {
+    &quot;started_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
+    &quot;resume&quot;: false,
+    &quot;status&quot;: &quot;complete&quot;,
+    &quot;completed_this_attempt&quot;: 3,
+    &quot;finished_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 0.207776
+  }
+]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      4
+    ],
+    &quot;estimate&quot;: 0.9979472993125447,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.034287787264515875
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.098115340102241,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.06326158533668404
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      2,
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.1985697113341798,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.07892806810459188
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-4&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2,
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.2599413262982493,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.07932045270946349
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;merge-5&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.3079784885907264,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.07580010129686389
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      4
+    ],
+    &quot;estimate&quot;: 0.9958106256775927,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.03397120287783606
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.097775667933197,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.0646716548352051
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      2,
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.199727199901095,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.08093323228903895
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-4&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2,
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.2623455195709574,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.08123055108515743
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;merge-5&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.3109492357397083,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.07748925376712439
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-1&quot;,
+    &quot;stage_indices&quot;: [
+      4
+    ],
+    &quot;estimate&quot;: 1.002558612225198,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.03404744720383073
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-2&quot;,
+    &quot;stage_indices&quot;: [
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.1026383742886676,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.06532360898792852
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-3&quot;,
+    &quot;stage_indices&quot;: [
+      2,
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.2045728427442168,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.08166060709704155
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-4&quot;,
+    &quot;stage_indices&quot;: [
+      1,
+      2,
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.2666243094506875,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.08230233495654796
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;merge-5&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    &quot;estimate&quot;: 1.31508737913696,
+    &quot;truth&quot;: 2.4890978987893417,
+    &quot;train_loss&quot;: 0.07847397541566838
+  }
+]</pre></details><h3>Machine-readable handoff</h3><pre id="handoff-stanford-two-hop-ols">{
+  &quot;study_id&quot;: &quot;stanford-two-hop-ols&quot;,
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;frozen_claim&quot;: &quot;Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.&quot;,
+  &quot;outcome_access&quot;: &quot;validated_completed_records_read&quot;,
+  &quot;expected_repetitions&quot;: 3,
+  &quot;completed_repetitions&quot;: 3,
+  &quot;validated_estimate_count&quot;: 15,
+  &quot;key_metrics&quot;: [
+    {
+      &quot;group&quot;: &quot;merge-1&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 0.9987721790717785,
+      &quot;truth&quot;: 2.4890978987893417,
+      &quot;bias&quot;: -1.4903257197175632,
+      &quot;std&quot;: 0.002815925019664697,
+      &quot;mse&quot;: 2.2210786802853892,
+      &quot;bias_mcse&quot;: 0.0019911596767177692,
+      &quot;mse_mcse&quot;: 0.005932631066180993,
+      &quot;bias_ci95&quot;: [
+        -1.4988929883358537,
+        -1.4817584510992727
+      ],
+      &quot;mse_ci95&quot;: [
+        2.2094507233956744,
+        2.232706637175104
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-2&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 1.099509794108035,
+      &quot;truth&quot;: 2.4890978987893417,
+      &quot;bias&quot;: -1.3895881046813068,
+      &quot;std&quot;: 0.0022165821671498945,
+      &quot;mse&quot;: 1.9309600139082894,
+      &quot;bias_mcse&quot;: 0.0015673602814488638,
+      &quot;mse_mcse&quot;: 0.004353557007432586,
+      &quot;bias_ci95&quot;: [
+        -1.3963319116747,
+        -1.3828442976879136
+      ],
+      &quot;mse_ci95&quot;: [
+        1.9224270421737215,
+        1.9394929856428573
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-3&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 1.2009565846598307,
+      &quot;truth&quot;: 2.4890978987893417,
+      &quot;bias&quot;: -1.288141314129511,
+      &quot;std&quot;: 0.002600376491369637,
+      &quot;mse&quot;: 1.6593148071252009,
+      &quot;bias_mcse&quot;: 0.0018387438506855523,
+      &quot;mse_mcse&quot;: 0.004734238639635038,
+      &quot;bias_ci95&quot;: [
+        -1.2960527903778751,
+        -1.280229837881147
+      ],
+      &quot;mse_ci95&quot;: [
+        1.6500356993915162,
+        1.6685939148588855
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-4&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 1.2629703851066314,
+      &quot;truth&quot;: 2.4890978987893417,
+      &quot;bias&quot;: -1.2261275136827103,
+      &quot;std&quot;: 0.0027638630763477975,
+      &quot;mse&quot;: 1.50339631874885,
+      &quot;bias_mcse&quot;: 0.0019543463235566403,
+      &quot;mse_mcse&quot;: 0.0047907874080958665,
+      &quot;bias_ci95&quot;: [
+        -1.234536387226533,
+        -1.2177186401388878
+      ],
+      &quot;mse_ci95&quot;: [
+        1.494006375428982,
+        1.5127862620687178
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;merge-5&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 1.311338367822465,
+      &quot;truth&quot;: 2.4890978987893417,
+      &quot;bias&quot;: -1.1777595309668767,
+      &quot;std&quot;: 0.0029152071433496203,
+      &quot;mse&quot;: 1.3871260112160064,
+      &quot;bias_mcse&quot;: 0.0020613627396259804,
+      &quot;mse_mcse&quot;: 0.004854392019784921,
+      &quot;bias_ci95&quot;: [
+        -1.1866288589854224,
+        -1.168890202948331
+      ],
+      &quot;mse_ci95&quot;: [
+        1.377611402857228,
+        1.396640619574785
+      ]
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.&quot;,
+    &quot;A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.&quot;,
+    &quot;Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.&quot;,
+    &quot;Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.&quot;,
+    &quot;GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.&quot;
+  ],
+  &quot;next_authorized_step&quot;: &quot;Inspect configuration and diagnostics before a full replication run; do not infer unrun paper outcomes.&quot;
+}</pre></section><footer>Standalone report · No external scripts, fonts, styles or images · Generated from validated experiment artifacts</footer></details><details><summary>stanford-cluster-baseline-ols — complete embedded experiment report</summary><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Reproducible experiments</div><h1>Ramp-up experiment report</h1><span class="pill ">COMPLETE</span><span class="pill">OLS · linear</span><p class="lede">Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.</p></header><section><h2>Execution outcome</h2><p>Run <code>stanford-cluster-baseline-ols</code> contains 3 validated complete repetitions out of 3 requested, producing 15 estimates. Status is derived from both the execution record and the available checkpoints.</p><div class="metrics"><div class="metric"><strong>3</strong><span>Complete repetitions</span></div><div class="metric"><strong>15</strong><span>Estimate records</span></div><div class="metric"><strong>11586</strong><span>Graph nodes</span></div><div class="metric"><strong>568309</strong><span>Initial edges</span></div></div></section><section><h2>Objective and experimental design</h2><p>GATE is the difference between mean potential outcomes under global treatment and global control. The study examines whether training a regression model on multiple treatment proportions improves this extrapolation under network interference. These runs quantify configured scenarios; no automatic hypothesis acceptance gate is imposed.</p><p>Design reference: the supplied NeurIPS 2026 manuscript, <em>Just Ramp-Up: Debiasing Regression-based Estimator for A/B Tests under Network Interference</em>, simulation study and detailed-experiment appendices. The linked preprint may retain its earlier title: <a href="https://arxiv.org/abs/2410.12740">arXiv:2410.12740</a>.</p><p>Each repetition has independent assignment and noise random streams derived from its root seed and repetition ID. Stages are generated once and reused across merge groups. Complete randomization selects floor(p × entity count) entities; cluster assignments preserve membership. A one-entity baseline differs from exact global control. The latest selected stage supplies the graph used for counterfactual evaluation.</p><h3>Frozen configuration</h3><pre>{
+  &quot;dataset&quot;: &quot;socfb-Stanford3.mtx&quot;,
+  &quot;outcome&quot;: &quot;linear&quot;,
+  &quot;level&quot;: &quot;cluster&quot;,
+  &quot;randomization&quot;: &quot;complete&quot;,
+  &quot;temporal&quot;: &quot;staggered&quot;,
+  &quot;merge&quot;: &quot;baseline_pair&quot;,
+  &quot;baseline&quot;: &quot;one&quot;,
+  &quot;stages&quot;: [
+    0.02,
+    0.05,
+    0.1,
+    0.25,
+    0.5
+  ],
+  &quot;estimator&quot;: &quot;ols&quot;,
+  &quot;repetitions&quot;: 3,
+  &quot;seed&quot;: 2026,
+  &quot;graph_seed&quot;: 0,
+  &quot;cluster_seed&quot;: 10,
+  &quot;model_seed&quot;: 2,
+  &quot;resolution&quot;: 10.0,
+  &quot;epochs&quot;: 400,
+  &quot;learning_rate&quot;: 0.004,
+  &quot;threads&quot;: 1,
+  &quot;alpha&quot;: 1.0,
+  &quot;beta&quot;: 1.0,
+  &quot;gamma&quot;: 1.0,
+  &quot;sigma&quot;: 0.1,
+  &quot;r2&quot;: 0.5,
+  &quot;purpose&quot;: &quot;smoke&quot;
+}</pre><h3>Selected stage groups and graph-specific truth</h3><pre>[
+  {
+    &quot;label&quot;: &quot;baseline+0.02&quot;,
+    &quot;indices&quot;: [
+      0,
+      1
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;baseline+0.05&quot;,
+    &quot;indices&quot;: [
+      0,
+      2
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;baseline+0.1&quot;,
+    &quot;indices&quot;: [
+      0,
+      3
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;baseline+0.25&quot;,
+    &quot;indices&quot;: [
+      0,
+      4
+    ],
+    &quot;truth&quot;: 2.0
+  },
+  {
+    &quot;label&quot;: &quot;baseline+0.5&quot;,
+    &quot;indices&quot;: [
+      0,
+      5
+    ],
+    &quot;truth&quot;: 2.0
+  }
+]</pre></section><section><h2>Results and Monte Carlo uncertainty</h2><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>baseline+0.02</td><td>3</td><td>2</td><td>1.3926</td><td>-0.607399</td><td>0.161518</td><td>0.395021</td><td>[-1.09881, -0.115992]</td></tr><tr><td>baseline+0.05</td><td>3</td><td>2</td><td>1.37836</td><td>-0.621637</td><td>0.0983293</td><td>0.396101</td><td>[-0.920797, -0.322476]</td></tr><tr><td>baseline+0.1</td><td>3</td><td>2</td><td>1.40992</td><td>-0.590083</td><td>0.0546118</td><td>0.35118</td><td>[-0.756235, -0.42393]</td></tr><tr><td>baseline+0.25</td><td>3</td><td>2</td><td>1.51922</td><td>-0.480781</td><td>0.0452264</td><td>0.233196</td><td>[-0.618379, -0.343183]</td></tr><tr><td>baseline+0.5</td><td>3</td><td>2</td><td>1.62015</td><td>-0.379849</td><td>0.00152383</td><td>0.144287</td><td>[-0.384485, -0.375212]</td></tr></tbody></table></div><svg class="chart" viewBox="0 0 1000 320" role="img" aria-label="MSE by selected stage group"><text x="22" y="26" fill="#536976" font-size="13">Empirical mean squared error · axis begins at zero</text><text x="22" y="66" font-size="15" fill="#172a36">baseline+0.02</text><rect x="205" y="45" width="658.201" height="30" rx="3" fill="#215e78"/><text x="873.201" y="66" font-size="14" fill="#172a36">0.395021</text><text x="22" y="118" font-size="15" fill="#172a36">baseline+0.05</text><rect x="205" y="97" width="660.000" height="30" rx="3" fill="#215e78"/><text x="875.000" y="118" font-size="14" fill="#172a36">0.396101</text><text x="22" y="170" font-size="15" fill="#172a36">baseline+0.1</text><rect x="205" y="149" width="585.151" height="30" rx="3" fill="#215e78"/><text x="800.151" y="170" font-size="14" fill="#172a36">0.35118</text><text x="22" y="222" font-size="15" fill="#172a36">baseline+0.25</text><rect x="205" y="201" width="388.561" height="30" rx="3" fill="#215e78"/><text x="603.561" y="222" font-size="14" fill="#172a36">0.233196</text><text x="22" y="274" font-size="15" fill="#172a36">baseline+0.5</text><rect x="205" y="253" width="240.418" height="30" rx="3" fill="#215e78"/><text x="455.418" y="274" font-size="14" fill="#172a36">0.144287</text></svg><p class="caption">Signed bias = mean(estimate − truth). Std uses ddof=0. MSE = mean((estimate − truth)²). Bias intervals use a Student-t critical value and the sample standard error of the errors. MSE intervals (in the detailed metrics) use a normal approximation, clipped at zero. With fewer than two repetitions, intervals are unavailable.</p><details><summary>Exact metrics and uncertainty</summary><pre>[
+  {
+    &quot;group&quot;: &quot;baseline+0.02&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 1.3926010147170969,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -0.607398985282903,
+    &quot;std&quot;: 0.16151769319257778,
+    &quot;mse&quot;: 0.39502149253695196,
+    &quot;bias_mcse&quot;: 0.11421025613808002,
+    &quot;mse_mcse&quot;: 0.1261148473813755,
+    &quot;bias_ci95&quot;: [
+      -1.0988060556147086,
+      -0.11599191495109751
+    ],
+    &quot;mse_ci95&quot;: [
+      0.147836391669456,
+      0.6422065934044479
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;baseline+0.05&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 1.378363266031327,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -0.6216367339686731,
+    &quot;std&quot;: 0.098329319835501,
+    &quot;mse&quot;: 0.3961008841585511,
+    &quot;bias_mcse&quot;: 0.06952932884514365,
+    &quot;mse_mcse&quot;: 0.08182466365948557,
+    &quot;bias_ci95&quot;: [
+      -0.9207972905181712,
+      -0.3224761774191751
+    ],
+    &quot;mse_ci95&quot;: [
+      0.23572454338595938,
+      0.5564772249311428
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;baseline+0.1&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 1.409917335393864,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -0.5900826646061357,
+    &quot;std&quot;: 0.05461175889392748,
+    &quot;mse&quot;: 0.3511799952781656,
+    &quot;bias_mcse&quot;: 0.03861634504642088,
+    &quot;mse_mcse&quot;: 0.04416464390522165,
+    &quot;bias_ci95&quot;: [
+      -0.7562353870310066,
+      -0.4239299421812648
+    ],
+    &quot;mse_ci95&quot;: [
+      0.2646172932239312,
+      0.43774269733240007
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;baseline+0.25&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 1.519218930778831,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -0.4807810692211689,
+    &quot;std&quot;: 0.045226402980824996,
+    &quot;mse&quot;: 0.2331958640480344,
+    &quot;bias_mcse&quot;: 0.031979896236416845,
+    &quot;mse_mcse&quot;: 0.031668062640561614,
+    &quot;bias_ci95&quot;: [
+      -0.6183794570581872,
+      -0.34318268138415065
+    ],
+    &quot;mse_ci95&quot;: [
+      0.17112646127253364,
+      0.29526526682353516
+    ]
+  },
+  {
+    &quot;group&quot;: &quot;baseline+0.5&quot;,
+    &quot;n&quot;: 3,
+    &quot;mean_estimate&quot;: 1.6201513779913865,
+    &quot;truth&quot;: 2.0,
+    &quot;bias&quot;: -0.3798486220086133,
+    &quot;std&quot;: 0.0015238272641621726,
+    &quot;mse&quot;: 0.1442872976913734,
+    &quot;bias_mcse&quot;: 0.0010775085918460169,
+    &quot;mse_mcse&quot;: 0.0008176573582287508,
+    &quot;bias_ci95&quot;: [
+      -0.3844847672925906,
+      -0.375212476724636
+    ],
+    &quot;mse_ci95&quot;: [
+      0.14268468926924505,
+      0.14588990611350178
+    ]
+  }
+]</pre></details></section><section><h2>Methods, provenance and diagnostics</h2><p>Node IDs are sorted once and shared by adjacency, treatment, features and responses. Graphs must be simple, unweighted and have no isolated nodes. Two-hop interference uses Wz + r₂[W(Wz) − diag(W²)z], with W = D⁻¹A; the diagonal removes closed walks without constructing a dense squared adjacency. True GATE is computed by averaging the noise-free global-treatment and global-control outcomes on the evaluation graph.</p><p>OLS fits an intercept and treatment on pooled observations. GNN uses three DGL ChebConv layers (2→16, K=2), (16→16, K=1), (16→1, K=1), ReLU, degree and treatment features, and Adam with betas (0.9, 0.999). Each epoch steps the optimizer through the selected stages in order, using each stage’s own graph. No held-out predictive test set or model-selection search is used.</p><p>Dynamic graphs are fixed across repetitions and evolve independently of treatment: each node at or above the degree median gets five candidate neighbors drawn with replacement proportional to current degree; loops and existing edges are discarded. Initial cluster membership stays fixed. Recorded edge counts are realized values, not a promise to match historical notebook RNG output.</p><pre>{
+  &quot;source&quot;: {
+    &quot;name&quot;: &quot;socfb-Stanford3.mtx&quot;,
+    &quot;size_bytes&quot;: 5737609,
+    &quot;mtime_ns&quot;: 1790490446112189700
+  },
+  &quot;graph&quot;: {
+    &quot;nodes&quot;: 11586,
+    &quot;edges&quot;: 568309,
+    &quot;clusters&quot;: 197,
+    &quot;minimum_degree&quot;: 1.0,
+    &quot;maximum_degree&quot;: 1172.0,
+    &quot;stage_edges&quot;: [
+      568309,
+      568309,
+      568309,
+      568309,
+      568309,
+      568309
+    ],
+    &quot;node_order&quot;: &quot;sorted original IDs&quot;
+  },
+  &quot;versions&quot;: {
+    &quot;rampup&quot;: &quot;0.1.0&quot;,
+    &quot;python&quot;: &quot;3.11.13&quot;,
+    &quot;numpy&quot;: &quot;1.26.4&quot;,
+    &quot;scipy&quot;: &quot;1.16.0&quot;,
+    &quot;networkx&quot;: &quot;3.4.2&quot;
+  },
+  &quot;git&quot;: {
+    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+    &quot;dirty&quot;: true
+  },
+  &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
+}</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;seed&quot;: [
+      2026,
+      0
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.0,
+        &quot;treated_units&quot;: 6,
+        &quot;unit_proportion&quot;: 0.0005178663904712584,
+        &quot;treated_entities&quot;: 1,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.00025444236634316497,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.02,
+        &quot;treated_units&quot;: 358,
+        &quot;unit_proportion&quot;: 0.03089936129811842,
+        &quot;treated_entities&quot;: 3,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.01504384113647829,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.05,
+        &quot;treated_units&quot;: 549,
+        &quot;unit_proportion&quot;: 0.047384774728120145,
+        &quot;treated_entities&quot;: 9,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.01769014103768511,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 3,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 1016,
+        &quot;unit_proportion&quot;: 0.08769204211979977,
+        &quot;treated_entities&quot;: 19,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.027126604023556992,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 4,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 2487,
+        &quot;unit_proportion&quot;: 0.21465561885033663,
+        &quot;treated_entities&quot;: 49,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.04249595421143798,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 5,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 5797,
+        &quot;unit_proportion&quot;: 0.5003452442603141,
+        &quot;treated_entities&quot;: 98,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.07259342752522976,
+        &quot;edges&quot;: 568309
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;seed&quot;: [
+      2026,
+      1
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.0,
+        &quot;treated_units&quot;: 21,
+        &quot;unit_proportion&quot;: 0.0018125323666494044,
+        &quot;treated_entities&quot;: 1,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.00042820742030757217,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.02,
+        &quot;treated_units&quot;: 235,
+        &quot;unit_proportion&quot;: 0.02028310029345762,
+        &quot;treated_entities&quot;: 3,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.0034120576826180593,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.05,
+        &quot;treated_units&quot;: 502,
+        &quot;unit_proportion&quot;: 0.04332815466942862,
+        &quot;treated_entities&quot;: 9,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.007532040743159444,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 3,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 898,
+        &quot;unit_proportion&quot;: 0.07750733644053168,
+        &quot;treated_entities&quot;: 19,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.01534413880219907,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 4,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 3647,
+        &quot;unit_proportion&quot;: 0.3147764543414466,
+        &quot;treated_entities&quot;: 49,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.07259083238119543,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 5,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 6331,
+        &quot;unit_proportion&quot;: 0.5464353530122562,
+        &quot;treated_entities&quot;: 98,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.06886560592239424,
+        &quot;edges&quot;: 568309
+      }
+    ]
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;seed&quot;: [
+      2026,
+      2
+    ],
+    &quot;stages&quot;: [
+      {
+        &quot;stage&quot;: 0,
+        &quot;nominal_proportion&quot;: 0.0,
+        &quot;treated_units&quot;: 35,
+        &quot;unit_proportion&quot;: 0.0030208872777490073,
+        &quot;treated_entities&quot;: 1,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.00021505953638466924,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 1,
+        &quot;nominal_proportion&quot;: 0.02,
+        &quot;treated_units&quot;: 92,
+        &quot;unit_proportion&quot;: 0.007940617987225963,
+        &quot;treated_entities&quot;: 3,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.0014635200389193155,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 2,
+        &quot;nominal_proportion&quot;: 0.05,
+        &quot;treated_units&quot;: 430,
+        &quot;unit_proportion&quot;: 0.03711375798377352,
+        &quot;treated_entities&quot;: 9,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.006620451399091093,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 3,
+        &quot;nominal_proportion&quot;: 0.1,
+        &quot;treated_units&quot;: 926,
+        &quot;unit_proportion&quot;: 0.07992404626273088,
+        &quot;treated_entities&quot;: 19,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.017320253820317287,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 4,
+        &quot;nominal_proportion&quot;: 0.25,
+        &quot;treated_units&quot;: 3473,
+        &quot;unit_proportion&quot;: 0.2997583290177801,
+        &quot;treated_entities&quot;: 49,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.06832683908949817,
+        &quot;edges&quot;: 568309
+      },
+      {
+        &quot;stage&quot;: 5,
+        &quot;nominal_proportion&quot;: 0.5,
+        &quot;treated_units&quot;: 6310,
+        &quot;unit_proportion&quot;: 0.5446228206456067,
+        &quot;treated_entities&quot;: 98,
+        &quot;entity_count&quot;: 197,
+        &quot;exposure_variance&quot;: 0.0683351433873639,
+        &quot;edges&quot;: 568309
+      }
+    ]
+  }
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+  {
+    &quot;started_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
+    &quot;resume&quot;: false,
+    &quot;status&quot;: &quot;complete&quot;,
+    &quot;completed_this_attempt&quot;: 3,
+    &quot;finished_at&quot;: &quot;2026-09-27T06:59:36+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 8.619771
+  }
+]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;baseline+0.02&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1
+    ],
+    &quot;estimate&quot;: 1.6202830259187606,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.011880161472281426
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;baseline+0.05&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      2
+    ],
+    &quot;estimate&quot;: 1.5167681818988723,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.01299874477270705
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;baseline+0.1&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      3
+    ],
+    &quot;estimate&quot;: 1.4866884070715285,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.015447427226538498
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;baseline+0.25&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      4
+    ],
+    &quot;estimate&quot;: 1.456026208610813,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.023332303811682845
+  },
+  {
+    &quot;replicate&quot;: 0,
+    &quot;group&quot;: &quot;baseline+0.5&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      5
+    ],
+    &quot;estimate&quot;: 1.6186970841801467,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.038931807106759614
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;baseline+0.02&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1
+    ],
+    &quot;estimate&quot;: 1.2946541637887115,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.010953646628121587
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;baseline+0.05&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      2
+    ],
+    &quot;estimate&quot;: 1.3208245192025856,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.012208309233110233
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;baseline+0.1&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      3
+    ],
+    &quot;estimate&quot;: 1.3642298662952774,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.014169557746967675
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;baseline+0.25&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      4
+    ],
+    &quot;estimate&quot;: 1.5593681386767806,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.02763486232237809
+  },
+  {
+    &quot;replicate&quot;: 1,
+    &quot;group&quot;: &quot;baseline+0.5&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      5
+    ],
+    &quot;estimate&quot;: 1.6222557853768897,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.03946128539511883
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;baseline+0.02&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      1
+    ],
+    &quot;estimate&quot;: 1.2628658544438187,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.010439643506001762
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;baseline+0.05&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      2
+    ],
+    &quot;estimate&quot;: 1.2974970969925228,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.011910045299736558
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;baseline+0.1&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      3
+    ],
+    &quot;estimate&quot;: 1.378833732814787,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.014640601119579285
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;baseline+0.25&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      4
+    ],
+    &quot;estimate&quot;: 1.5422624450488995,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.028822292402898367
+  },
+  {
+    &quot;replicate&quot;: 2,
+    &quot;group&quot;: &quot;baseline+0.5&quot;,
+    &quot;stage_indices&quot;: [
+      0,
+      5
+    ],
+    &quot;estimate&quot;: 1.6195012644171236,
+    &quot;truth&quot;: 2.0,
+    &quot;train_loss&quot;: 0.04110552304561814
+  }
+]</pre></details><h3>Machine-readable handoff</h3><pre id="handoff-stanford-cluster-baseline-ols">{
+  &quot;study_id&quot;: &quot;stanford-cluster-baseline-ols&quot;,
+  &quot;status&quot;: &quot;complete&quot;,
+  &quot;frozen_claim&quot;: &quot;Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.&quot;,
+  &quot;outcome_access&quot;: &quot;validated_completed_records_read&quot;,
+  &quot;expected_repetitions&quot;: 3,
+  &quot;completed_repetitions&quot;: 3,
+  &quot;validated_estimate_count&quot;: 15,
+  &quot;key_metrics&quot;: [
+    {
+      &quot;group&quot;: &quot;baseline+0.02&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 1.3926010147170969,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -0.607398985282903,
+      &quot;std&quot;: 0.16151769319257778,
+      &quot;mse&quot;: 0.39502149253695196,
+      &quot;bias_mcse&quot;: 0.11421025613808002,
+      &quot;mse_mcse&quot;: 0.1261148473813755,
+      &quot;bias_ci95&quot;: [
+        -1.0988060556147086,
+        -0.11599191495109751
+      ],
+      &quot;mse_ci95&quot;: [
+        0.147836391669456,
+        0.6422065934044479
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;baseline+0.05&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 1.378363266031327,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -0.6216367339686731,
+      &quot;std&quot;: 0.098329319835501,
+      &quot;mse&quot;: 0.3961008841585511,
+      &quot;bias_mcse&quot;: 0.06952932884514365,
+      &quot;mse_mcse&quot;: 0.08182466365948557,
+      &quot;bias_ci95&quot;: [
+        -0.9207972905181712,
+        -0.3224761774191751
+      ],
+      &quot;mse_ci95&quot;: [
+        0.23572454338595938,
+        0.5564772249311428
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;baseline+0.1&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 1.409917335393864,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -0.5900826646061357,
+      &quot;std&quot;: 0.05461175889392748,
+      &quot;mse&quot;: 0.3511799952781656,
+      &quot;bias_mcse&quot;: 0.03861634504642088,
+      &quot;mse_mcse&quot;: 0.04416464390522165,
+      &quot;bias_ci95&quot;: [
+        -0.7562353870310066,
+        -0.4239299421812648
+      ],
+      &quot;mse_ci95&quot;: [
+        0.2646172932239312,
+        0.43774269733240007
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;baseline+0.25&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 1.519218930778831,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -0.4807810692211689,
+      &quot;std&quot;: 0.045226402980824996,
+      &quot;mse&quot;: 0.2331958640480344,
+      &quot;bias_mcse&quot;: 0.031979896236416845,
+      &quot;mse_mcse&quot;: 0.031668062640561614,
+      &quot;bias_ci95&quot;: [
+        -0.6183794570581872,
+        -0.34318268138415065
+      ],
+      &quot;mse_ci95&quot;: [
+        0.17112646127253364,
+        0.29526526682353516
+      ]
+    },
+    {
+      &quot;group&quot;: &quot;baseline+0.5&quot;,
+      &quot;n&quot;: 3,
+      &quot;mean_estimate&quot;: 1.6201513779913865,
+      &quot;truth&quot;: 2.0,
+      &quot;bias&quot;: -0.3798486220086133,
+      &quot;std&quot;: 0.0015238272641621726,
+      &quot;mse&quot;: 0.1442872976913734,
+      &quot;bias_mcse&quot;: 0.0010775085918460169,
+      &quot;mse_mcse&quot;: 0.0008176573582287508,
+      &quot;bias_ci95&quot;: [
+        -0.3844847672925906,
+        -0.375212476724636
+      ],
+      &quot;mse_ci95&quot;: [
+        0.14268468926924505,
+        0.14588990611350178
+      ]
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.&quot;,
+    &quot;A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.&quot;,
+    &quot;Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.&quot;,
+    &quot;Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.&quot;,
+    &quot;GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.&quot;
+  ],
+  &quot;next_authorized_step&quot;: &quot;Inspect configuration and diagnostics before a full replication run; do not infer unrun paper outcomes.&quot;
+}</pre></section><footer>Standalone report · No external scripts, fonts, styles or images · Generated from validated experiment artifacts</footer></details><h2>Reproducibility and handoff</h2><p>Rebuild with <code>python scripts/validate_refactor.py --output outputs/refactor-validation --report reports/refactor-validation.html</code> from a compatible environment. Use a new output directory for new execution; <code>--reuse</code> reuses validated cached case records and reruns test/build checks. The evidence JSON and per-case artifacts live under the selected output directory. Source paths and local task metadata are sanitized in this shareable HTML.</p><p>The code and README still require the recorded independent code review and remote-push verification; those repository operations are distinct from the completed local experiment evidence. Full paper-sized runs, historical partition recovery and supplementary missing-source experiments are separate follow-up work.</p><h3>Machine-readable handoff</h3><pre id="handoff">{
+  &quot;study_id&quot;: &quot;just-ramp-up-refactor-validation-2026-09-27&quot;,
+  &quot;status&quot;: &quot;passed&quot;,
+  &quot;frozen_claim&quot;: &quot;Engineering correctness and bounded smoke execution only; no published-table replication claim.&quot;,
+  &quot;outcome_access&quot;: &quot;validated smoke outcomes read; historical Result arrays and full-paper outcomes not analyzed&quot;,
+  &quot;tests_passed&quot;: 58,
+  &quot;completed_cases&quot;: 5,
+  &quot;completed_repetitions&quot;: 19,
+  &quot;estimate_records&quot;: 69,
+  &quot;major_limitations&quot;: [
+    &quot;Full 100-repetition/400-epoch paper experiments were not run.&quot;,
+    &quot;Stanford Louvain partition has 197 clusters here, versus 192 in the manuscript.&quot;,
+    &quot;Node alignment, temporal assignment, baseline and RNG corrections change legacy behavior.&quot;,
+    &quot;MII/Hájek/Lagrange/MIT8 supplementary reproductions remain outside implemented scope.&quot;
+  ],
+  &quot;next_authorized_step&quot;: &quot;Finish independent review and push the refactor; full paper replication is a separate study.&quot;
+}</pre><details><summary>Complete validation metadata</summary><pre>{
+  &quot;generated_at&quot;: &quot;2026-09-27T06:59:36+00:00&quot;,
+  &quot;status&quot;: &quot;passed&quot;,
+  &quot;tests_passed&quot;: 58,
+  &quot;checks&quot;: [
+    {
+      &quot;command&quot;: &quot;python -m pytest -q&quot;,
+      &quot;exit_code&quot;: 0,
+      &quot;elapsed_seconds&quot;: 26.925,
+      &quot;stdout&quot;: &quot;..........................................................               [100%]\n58 passed in 25.49s\n&quot;,
+      &quot;stderr&quot;: &quot;&quot;
+    },
+    {
+      &quot;command&quot;: &quot;python -m pip wheel --no-deps --no-build-isolation --no-cache-dir --wheel-dir [local path] .&quot;,
+      &quot;exit_code&quot;: 0,
+      &quot;elapsed_seconds&quot;: 4.457,
+      &quot;stdout&quot;: &quot;Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple\nProcessing [local path]\n  Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status &#x27;done&#x27;\nBuilding wheels for collected packages: just-ramp-up\n  Building wheel for just-ramp-up (pyproject.toml): started\n  Building wheel for just-ramp-up (pyproject.toml): finished with status &#x27;done&#x27;\n  Created wheel for just-ramp-up: filename=just_ramp_up-0.1.0-py3-none-any.whl size=25735 sha256=9abed6a0cad0a381e2821400dbc3e9b5e03e89c22a5a565f89440d3b08bdeb87\n  Stored in directory: [local path]\nSuccessfully built just-ramp-up\n&quot;,
+      &quot;stderr&quot;: &quot;&quot;
+    }
+  ],
+  &quot;cases&quot;: [
+    {
+      &quot;case&quot;: &quot;synthetic-ols&quot;,
+      &quot;status&quot;: &quot;complete&quot;,
+      &quot;repetitions&quot;: 8,
+      &quot;records&quot;: 24,
+      &quot;graph&quot;: {
+        &quot;nodes&quot;: 60,
+        &quot;edges&quot;: 180,
+        &quot;clusters&quot;: null,
+        &quot;minimum_degree&quot;: 4.0,
+        &quot;maximum_degree&quot;: 8.0,
+        &quot;stage_edges&quot;: [
+          180,
+          180,
+          180
+        ],
+        &quot;node_order&quot;: &quot;sorted original IDs&quot;
+      },
+      &quot;metrics&quot;: [
+        {
+          &quot;group&quot;: &quot;merge-1&quot;,
+          &quot;n&quot;: 8,
+          &quot;mean_estimate&quot;: 1.002762208595592,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -0.9972377914044079,
+          &quot;std&quot;: 0.0649397955482589,
+          &quot;mse&quot;: 0.9987003896509912,
+          &quot;bias_mcse&quot;: 0.024544935601724636,
+          &quot;mse_mcse&quot;: 0.050060807163882,
+          &quot;bias_ci95&quot;: [
+            -1.055277341382029,
+            -0.9391982414267868
+          ],
+          &quot;mse_ci95&quot;: [
+            0.9005812076097824,
+            1.0968195716921998
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-2&quot;,
+          &quot;n&quot;: 8,
+          &quot;mean_estimate&quot;: 1.0712985506664157,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -0.9287014493335843,
+          &quot;std&quot;: 0.03441596080722117,
+          &quot;mse&quot;: 0.8636708403525842,
+          &quot;bias_mcse&quot;: 0.013008010489607567,
+          &quot;mse_mcse&quot;: 0.024365409120688398,
+          &quot;bias_ci95&quot;: [
+            -0.9594605064022838,
+            -0.8979423922648849
+          ],
+          &quot;mse_ci95&quot;: [
+            0.815914638476035,
+            0.9114270422291335
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-3&quot;,
+          &quot;n&quot;: 8,
+          &quot;mean_estimate&quot;: 1.1343413466979717,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -0.8656586533020284,
+          &quot;std&quot;: 0.03274636799351053,
+          &quot;mse&quot;: 0.7504372286534478,
+          &quot;bias_mcse&quot;: 0.012376963721633431,
+          &quot;mse_mcse&quot;: 0.021708580901562212,
+          &quot;bias_ci95&quot;: [
+            -0.8949255218792869,
+            -0.8363917847247699
+          ],
+          &quot;mse_ci95&quot;: [
+            0.7078884100863858,
+            0.7929860472205097
+          ]
+        }
+      ],
+      &quot;versions&quot;: {
+        &quot;rampup&quot;: &quot;0.1.0&quot;,
+        &quot;python&quot;: &quot;3.11.13&quot;,
+        &quot;numpy&quot;: &quot;1.26.4&quot;,
+        &quot;scipy&quot;: &quot;1.16.0&quot;,
+        &quot;networkx&quot;: &quot;3.4.2&quot;
+      },
+      &quot;git&quot;: {
+        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+        &quot;dirty&quot;: true
+      }
+    },
+    {
+      &quot;case&quot;: &quot;synthetic-gnn&quot;,
+      &quot;status&quot;: &quot;complete&quot;,
+      &quot;repetitions&quot;: 3,
+      &quot;records&quot;: 9,
+      &quot;graph&quot;: {
+        &quot;nodes&quot;: 60,
+        &quot;edges&quot;: 180,
+        &quot;clusters&quot;: null,
+        &quot;minimum_degree&quot;: 4.0,
+        &quot;maximum_degree&quot;: 8.0,
+        &quot;stage_edges&quot;: [
+          180,
+          180,
+          180
+        ],
+        &quot;node_order&quot;: &quot;sorted original IDs&quot;
+      },
+      &quot;metrics&quot;: [
+        {
+          &quot;group&quot;: &quot;merge-1&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 0.015533347924550375,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -1.9844666520754497,
+          &quot;std&quot;: 8.066979226970252e-05,
+          &quot;mse&quot;: 3.938107899707159,
+          &quot;bias_mcse&quot;: 5.704215715081678e-05,
+          &quot;mse_mcse&quot;: 0.00022639661756506361,
+          &quot;bias_ci95&quot;: [
+            -1.9847120846686224,
+            -1.984221219482277
+          ],
+          &quot;mse_ci95&quot;: [
+            3.9376641623367314,
+            3.9385516370775866
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-2&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 0.07829682032267253,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -1.9217031796773274,
+          &quot;std&quot;: 0.0004322267501537379,
+          &quot;mse&quot;: 3.6929432976019143,
+          &quot;bias_mcse&quot;: 0.0003056304660439318,
+          &quot;mse_mcse&quot;: 0.0011747058879669596,
+          &quot;bias_ci95&quot;: [
+            -1.9230182014363297,
+            -1.920388157918325
+          ],
+          &quot;mse_ci95&quot;: [
+            3.690640874061499,
+            3.6952457211423297
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-3&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 0.13067380587259927,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -1.8693261941274006,
+          &quot;std&quot;: 0.0008049118888480513,
+          &quot;mse&quot;: 3.4943810679339813,
+          &quot;bias_mcse&quot;: 0.0005691586548621296,
+          &quot;mse_mcse&quot;: 0.002127835150840598,
+          &quot;bias_ci95&quot;: [
+            -1.8717750861673734,
+            -1.8668773020874279
+          ],
+          &quot;mse_ci95&quot;: [
+            3.4902105110383337,
+            3.498551624829629
+          ]
+        }
+      ],
+      &quot;versions&quot;: {
+        &quot;rampup&quot;: &quot;0.1.0&quot;,
+        &quot;python&quot;: &quot;3.11.13&quot;,
+        &quot;numpy&quot;: &quot;1.26.4&quot;,
+        &quot;scipy&quot;: &quot;1.16.0&quot;,
+        &quot;networkx&quot;: &quot;3.4.2&quot;,
+        &quot;torch&quot;: &quot;2.3.1&quot;,
+        &quot;dgl&quot;: &quot;2.3.0&quot;
+      },
+      &quot;git&quot;: {
+        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+        &quot;dirty&quot;: true
+      }
+    },
+    {
+      &quot;case&quot;: &quot;synthetic-dynamic-gnn&quot;,
+      &quot;status&quot;: &quot;complete&quot;,
+      &quot;repetitions&quot;: 2,
+      &quot;records&quot;: 6,
+      &quot;graph&quot;: {
+        &quot;nodes&quot;: 60,
+        &quot;edges&quot;: 180,
+        &quot;clusters&quot;: 36,
+        &quot;minimum_degree&quot;: 4.0,
+        &quot;maximum_degree&quot;: 8.0,
+        &quot;stage_edges&quot;: [
+          349,
+          472,
+          555
+        ],
+        &quot;node_order&quot;: &quot;sorted original IDs&quot;
+      },
+      &quot;metrics&quot;: [
+        {
+          &quot;group&quot;: &quot;merge-1&quot;,
+          &quot;n&quot;: 2,
+          &quot;mean_estimate&quot;: -0.00765913724899292,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -2.007659137248993,
+          &quot;std&quot;: 0.00019592046737670898,
+          &quot;mse&quot;: 4.0306952497642,
+          &quot;bias_mcse&quot;: 0.00019592046737670898,
+          &quot;mse_mcse&quot;: 0.000786683033005886,
+          &quot;bias_ci95&quot;: [
+            -2.0101485428195387,
+            -2.005169731678447
+          ],
+          &quot;mse_ci95&quot;: [
+            4.0291533510195086,
+            4.032237148508892
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-2&quot;,
+          &quot;n&quot;: 2,
+          &quot;mean_estimate&quot;: 0.010572850704193115,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -1.9894271492958069,
+          &quot;std&quot;: 0.0003224015235900879,
+          &quot;mse&quot;: 3.957820486297983,
+          &quot;bias_mcse&quot;: 0.0003224015235900879,
+          &quot;mse_mcse&quot;: 0.0012827886880089066,
+          &quot;bias_ci95&quot;: [
+            -1.9935236490618802,
+            -1.9853306495297336
+          ],
+          &quot;mse_ci95&quot;: [
+            3.9553062204694855,
+            3.9603347521264807
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-3&quot;,
+          &quot;n&quot;: 2,
+          &quot;mean_estimate&quot;: 0.024948954582214355,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -1.9750510454177856,
+          &quot;std&quot;: 0.0006600618362426758,
+          &quot;mse&quot;: 3.9008270676875156,
+          &quot;bias_mcse&quot;: 0.0006600618362426757,
+          &quot;mse_mcse&quot;: 0.0026073116394229596,
+          &quot;bias_ci95&quot;: [
+            -1.9834379262477904,
+            -1.966664164587781
+          ],
+          &quot;mse_ci95&quot;: [
+            3.8957167368742467,
+            3.9059373985007846
+          ]
+        }
+      ],
+      &quot;versions&quot;: {
+        &quot;rampup&quot;: &quot;0.1.0&quot;,
+        &quot;python&quot;: &quot;3.11.13&quot;,
+        &quot;numpy&quot;: &quot;1.26.4&quot;,
+        &quot;scipy&quot;: &quot;1.16.0&quot;,
+        &quot;networkx&quot;: &quot;3.4.2&quot;,
+        &quot;torch&quot;: &quot;2.3.1&quot;,
+        &quot;dgl&quot;: &quot;2.3.0&quot;
+      },
+      &quot;git&quot;: {
+        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+        &quot;dirty&quot;: true
+      }
+    },
+    {
+      &quot;case&quot;: &quot;stanford-two-hop-ols&quot;,
+      &quot;status&quot;: &quot;complete&quot;,
+      &quot;repetitions&quot;: 3,
+      &quot;records&quot;: 15,
+      &quot;graph&quot;: {
+        &quot;nodes&quot;: 11586,
+        &quot;edges&quot;: 568309,
+        &quot;clusters&quot;: null,
+        &quot;minimum_degree&quot;: 1.0,
+        &quot;maximum_degree&quot;: 1172.0,
+        &quot;stage_edges&quot;: [
+          568309,
+          568309,
+          568309,
+          568309,
+          568309
+        ],
+        &quot;node_order&quot;: &quot;sorted original IDs&quot;
+      },
+      &quot;metrics&quot;: [
+        {
+          &quot;group&quot;: &quot;merge-1&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 0.9987721790717785,
+          &quot;truth&quot;: 2.4890978987893417,
+          &quot;bias&quot;: -1.4903257197175632,
+          &quot;std&quot;: 0.002815925019664697,
+          &quot;mse&quot;: 2.2210786802853892,
+          &quot;bias_mcse&quot;: 0.0019911596767177692,
+          &quot;mse_mcse&quot;: 0.005932631066180993,
+          &quot;bias_ci95&quot;: [
+            -1.4988929883358537,
+            -1.4817584510992727
+          ],
+          &quot;mse_ci95&quot;: [
+            2.2094507233956744,
+            2.232706637175104
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-2&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 1.099509794108035,
+          &quot;truth&quot;: 2.4890978987893417,
+          &quot;bias&quot;: -1.3895881046813068,
+          &quot;std&quot;: 0.0022165821671498945,
+          &quot;mse&quot;: 1.9309600139082894,
+          &quot;bias_mcse&quot;: 0.0015673602814488638,
+          &quot;mse_mcse&quot;: 0.004353557007432586,
+          &quot;bias_ci95&quot;: [
+            -1.3963319116747,
+            -1.3828442976879136
+          ],
+          &quot;mse_ci95&quot;: [
+            1.9224270421737215,
+            1.9394929856428573
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-3&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 1.2009565846598307,
+          &quot;truth&quot;: 2.4890978987893417,
+          &quot;bias&quot;: -1.288141314129511,
+          &quot;std&quot;: 0.002600376491369637,
+          &quot;mse&quot;: 1.6593148071252009,
+          &quot;bias_mcse&quot;: 0.0018387438506855523,
+          &quot;mse_mcse&quot;: 0.004734238639635038,
+          &quot;bias_ci95&quot;: [
+            -1.2960527903778751,
+            -1.280229837881147
+          ],
+          &quot;mse_ci95&quot;: [
+            1.6500356993915162,
+            1.6685939148588855
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-4&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 1.2629703851066314,
+          &quot;truth&quot;: 2.4890978987893417,
+          &quot;bias&quot;: -1.2261275136827103,
+          &quot;std&quot;: 0.0027638630763477975,
+          &quot;mse&quot;: 1.50339631874885,
+          &quot;bias_mcse&quot;: 0.0019543463235566403,
+          &quot;mse_mcse&quot;: 0.0047907874080958665,
+          &quot;bias_ci95&quot;: [
+            -1.234536387226533,
+            -1.2177186401388878
+          ],
+          &quot;mse_ci95&quot;: [
+            1.494006375428982,
+            1.5127862620687178
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;merge-5&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 1.311338367822465,
+          &quot;truth&quot;: 2.4890978987893417,
+          &quot;bias&quot;: -1.1777595309668767,
+          &quot;std&quot;: 0.0029152071433496203,
+          &quot;mse&quot;: 1.3871260112160064,
+          &quot;bias_mcse&quot;: 0.0020613627396259804,
+          &quot;mse_mcse&quot;: 0.004854392019784921,
+          &quot;bias_ci95&quot;: [
+            -1.1866288589854224,
+            -1.168890202948331
+          ],
+          &quot;mse_ci95&quot;: [
+            1.377611402857228,
+            1.396640619574785
+          ]
+        }
+      ],
+      &quot;versions&quot;: {
+        &quot;rampup&quot;: &quot;0.1.0&quot;,
+        &quot;python&quot;: &quot;3.11.13&quot;,
+        &quot;numpy&quot;: &quot;1.26.4&quot;,
+        &quot;scipy&quot;: &quot;1.16.0&quot;,
+        &quot;networkx&quot;: &quot;3.4.2&quot;
+      },
+      &quot;git&quot;: {
+        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+        &quot;dirty&quot;: true
+      }
+    },
+    {
+      &quot;case&quot;: &quot;stanford-cluster-baseline-ols&quot;,
+      &quot;status&quot;: &quot;complete&quot;,
+      &quot;repetitions&quot;: 3,
+      &quot;records&quot;: 15,
+      &quot;graph&quot;: {
+        &quot;nodes&quot;: 11586,
+        &quot;edges&quot;: 568309,
+        &quot;clusters&quot;: 197,
+        &quot;minimum_degree&quot;: 1.0,
+        &quot;maximum_degree&quot;: 1172.0,
+        &quot;stage_edges&quot;: [
+          568309,
+          568309,
+          568309,
+          568309,
+          568309,
+          568309
+        ],
+        &quot;node_order&quot;: &quot;sorted original IDs&quot;
+      },
+      &quot;metrics&quot;: [
+        {
+          &quot;group&quot;: &quot;baseline+0.02&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 1.3926010147170969,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -0.607398985282903,
+          &quot;std&quot;: 0.16151769319257778,
+          &quot;mse&quot;: 0.39502149253695196,
+          &quot;bias_mcse&quot;: 0.11421025613808002,
+          &quot;mse_mcse&quot;: 0.1261148473813755,
+          &quot;bias_ci95&quot;: [
+            -1.0988060556147086,
+            -0.11599191495109751
+          ],
+          &quot;mse_ci95&quot;: [
+            0.147836391669456,
+            0.6422065934044479
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;baseline+0.05&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 1.378363266031327,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -0.6216367339686731,
+          &quot;std&quot;: 0.098329319835501,
+          &quot;mse&quot;: 0.3961008841585511,
+          &quot;bias_mcse&quot;: 0.06952932884514365,
+          &quot;mse_mcse&quot;: 0.08182466365948557,
+          &quot;bias_ci95&quot;: [
+            -0.9207972905181712,
+            -0.3224761774191751
+          ],
+          &quot;mse_ci95&quot;: [
+            0.23572454338595938,
+            0.5564772249311428
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;baseline+0.1&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 1.409917335393864,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -0.5900826646061357,
+          &quot;std&quot;: 0.05461175889392748,
+          &quot;mse&quot;: 0.3511799952781656,
+          &quot;bias_mcse&quot;: 0.03861634504642088,
+          &quot;mse_mcse&quot;: 0.04416464390522165,
+          &quot;bias_ci95&quot;: [
+            -0.7562353870310066,
+            -0.4239299421812648
+          ],
+          &quot;mse_ci95&quot;: [
+            0.2646172932239312,
+            0.43774269733240007
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;baseline+0.25&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 1.519218930778831,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -0.4807810692211689,
+          &quot;std&quot;: 0.045226402980824996,
+          &quot;mse&quot;: 0.2331958640480344,
+          &quot;bias_mcse&quot;: 0.031979896236416845,
+          &quot;mse_mcse&quot;: 0.031668062640561614,
+          &quot;bias_ci95&quot;: [
+            -0.6183794570581872,
+            -0.34318268138415065
+          ],
+          &quot;mse_ci95&quot;: [
+            0.17112646127253364,
+            0.29526526682353516
+          ]
+        },
+        {
+          &quot;group&quot;: &quot;baseline+0.5&quot;,
+          &quot;n&quot;: 3,
+          &quot;mean_estimate&quot;: 1.6201513779913865,
+          &quot;truth&quot;: 2.0,
+          &quot;bias&quot;: -0.3798486220086133,
+          &quot;std&quot;: 0.0015238272641621726,
+          &quot;mse&quot;: 0.1442872976913734,
+          &quot;bias_mcse&quot;: 0.0010775085918460169,
+          &quot;mse_mcse&quot;: 0.0008176573582287508,
+          &quot;bias_ci95&quot;: [
+            -0.3844847672925906,
+            -0.375212476724636
+          ],
+          &quot;mse_ci95&quot;: [
+            0.14268468926924505,
+            0.14588990611350178
+          ]
+        }
+      ],
+      &quot;versions&quot;: {
+        &quot;rampup&quot;: &quot;0.1.0&quot;,
+        &quot;python&quot;: &quot;3.11.13&quot;,
+        &quot;numpy&quot;: &quot;1.26.4&quot;,
+        &quot;scipy&quot;: &quot;1.16.0&quot;,
+        &quot;networkx&quot;: &quot;3.4.2&quot;
+      },
+      &quot;git&quot;: {
+        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
+        &quot;dirty&quot;: true
+      }
+    }
+  ],
+  &quot;cache_reused&quot;: false
+}</pre></details><footer>NeurIPS 2026 · <a href="https://arxiv.org/abs/2410.12740">arXiv:2410.12740</a> · Offline standalone report · No hidden or quarantined outcomes included</footer></main></body></html>

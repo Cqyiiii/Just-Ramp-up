@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" role="img" aria-labelledby="title desc">
+  <title id="title">Just Ramp-Up — turn sequential experiments into richer training data</title>
+  <desc id="desc">Increasing treatment proportions from 2 percent to 50 percent, pooling selected stages, and predicting global treatment versus global control.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#122c3c"/><stop offset="1" stop-color="#254d5d"/></linearGradient>
+    <linearGradient id="warm" x2="0" y2="1"><stop stop-color="#efa984"/><stop offset="1" stop-color="#dc765b"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#90b8bf"/></marker>
+  </defs>
+  <rect width="1200" height="440" rx="18" fill="url(#bg)"/>
+  <g fill="none" stroke="#567988" stroke-opacity=".24"><circle cx="1060" cy="-10" r="180"/><circle cx="1060" cy="-10" r="260"/><circle cx="1060" cy="-10" r="340"/></g>
+  <text x="48" y="46" font-family="sans-serif" font-size="12" font-weight="bold" letter-spacing="3" fill="#accad1">NETWORK INTERFERENCE · MULTIPLE EXPERIMENTS</text>
+  <text x="48" y="105" font-family="Georgia,serif" font-size="43" fill="#fbf6ed">Your ramp-up is also your training data.</text>
+  <text x="48" y="141" font-family="sans-serif" font-size="17" fill="#bed0d5">Merge treatment proportions. Enrich exposure variation. Estimate the global effect.</text>
+  <g font-family="sans-serif">
+    <text x="48" y="200" fill="#91b4bf" font-size="12" letter-spacing="2">01 / RAMP UP</text>
+    <line x1="48" y1="337" x2="445" y2="337" stroke="#6f929d"/>
+    <g fill="url(#warm)"><rect x="63" y="304" width="46" height="33" rx="4"/><rect x="143" y="288" width="46" height="49" rx="4"/><rect x="223" y="266" width="46" height="71" rx="4"/><rect x="303" y="232" width="46" height="105" rx="4"/><rect x="383" y="210" width="46" height="127" rx="4"/></g>
+    <g fill="#f1ebe3" font-size="15" text-anchor="middle"><text x="86" y="365">2%</text><text x="166" y="365">5%</text><text x="246" y="365">10%</text><text x="326" y="365">25%</text><text x="406" y="365">50%</text></g>
+    <path d="M460 275 H515" stroke="#90b8bf" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="546" y="200" fill="#91b4bf" font-size="12" letter-spacing="2">02 / MERGE &amp; FIT</text>
+    <rect x="541" y="225" width="229" height="105" rx="9" fill="#315664" stroke="#638a95"/>
+    <text x="655" y="265" fill="#fcf6ed" font-family="Georgia,serif" font-size="26" text-anchor="middle">One regressor</text>
+    <text x="655" y="296" fill="#b7ced4" font-size="14" text-anchor="middle">OLS or a lightweight GNN</text>
+    <path d="M787 275 H841" stroke="#90b8bf" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="866" y="200" fill="#91b4bf" font-size="12" letter-spacing="2">03 / EXTRAPOLATE</text>
+    <rect x="865" y="225" width="128" height="105" rx="9" fill="#1e3e4c" stroke="#638a95"/>
+    <rect x="1010" y="225" width="143" height="105" rx="9" fill="#e59a78"/>
+    <text x="929" y="270" fill="#fcf6ed" font-size="30" text-anchor="middle">0%</text>
+    <text x="1081" y="270" fill="#183543" font-size="30" text-anchor="middle">100%</text>
+    <text x="929" y="300" fill="#b7ced4" font-size="13" text-anchor="middle">global control</text>
+    <text x="1081" y="300" fill="#294856" font-size="13" text-anchor="middle">global treatment</text>
+    <text x="48" y="410" fill="#99b6c0" font-size="12">Conceptual overview · bar heights are illustrative · GATE = mean global-treatment outcome − mean global-control outcome</text>
+  </g>
+</svg>
