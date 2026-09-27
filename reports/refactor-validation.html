@@ -12,7 +12,7 @@ table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:ta
 details{border:1px solid var(--line);background:white;padding:14px 18px;margin:14px 0}summary{cursor:pointer;font-weight:600}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;background:#eaf0f1;padding:18px;border-radius:5px;max-height:650px;overflow:auto}
 code{font:13px ui-monospace,SFMono-Regular,Consolas,monospace}.caption,small{color:var(--muted);font-size:13px}.chart{display:block;width:100%;height:auto;background:white;border:1px solid var(--line)}a{color:var(--blue)}li{margin:7px 0}footer{margin-top:46px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
 @media(max-width:650px){main{padding:22px 18px 44px}.metrics{grid-template-columns:repeat(2,1fr)}h1{letter-spacing:-.7px}th,td{padding:9px}}@media print{body{background:white}main{padding:0}details{break-inside:avoid}pre{max-height:none}.scroll{overflow:visible}}
-</style></head><body><main><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Engineering evidence</div><h1>A reproducible experiment system,<br>with explicit scientific boundaries.</h1><span class="pill">VALIDATION PASSED</span><p class="lede">58 tests, 5 bounded execution cases, 69 inspectable estimates. This report records the system refactor and its verification; it does not claim to reproduce the paper’s numerical tables.</p></header><h2>What was changed and why</h2><p>The original repository distributed experimental logic across 37 notebooks with duplicated graph loading, randomization, outcome functions, model training and result handling. The user requested maintainability and reproducibility, a polished NeurIPS 2026 README, and a push back to the same repository. The latest supplied manuscript defines the intended experimental settings.</p><p>The maintained <code>rampup</code> package now separates those responsibilities and exposes a configuration-driven CLI. Historical notebooks and result arrays remain available in place. The new engine corrects node/feature alignment and dynamic-graph forwarding, records realized experimental designs, and commits complete repetitions atomically. Each run includes its own offline report.</p><h2>Frozen verification design and gates</h2><p>The confirmatory engineering checks are numerical tests on hand-computed fixtures, real GNN stage-graph/determinism tests, recovery/corruption/concurrency tests, CLI integration, all six outcome families across four merge/level combinations, and a distributable wheel build. Acceptance requires a zero test/build exit code and valid complete records for every execution case. No accuracy threshold or paper-effect confirmation is imposed on small smoke runs.</p><p>The five execution cases were chosen before execution to cover OLS, GNN, dynamic stage graphs, sparse two-hop interference on Stanford, and the near-zero cluster baseline. Their seed is 2026; GNN initialization uses seed 2. Synthetic cases use 60 nodes and three proportions; real cases use the five paper proportions. Full frozen configurations and exact per-case evidence are embedded below.</p><div class="scroll"><table><tr><th>Case</th><th>Status</th><th>Repetitions</th><th>Estimates</th><th>Nodes</th><th>Initial edges</th></tr><tr><td>synthetic-ols</td><td>complete</td><td>8</td><td>24</td><td>60</td><td>180</td></tr><tr><td>synthetic-gnn</td><td>complete</td><td>3</td><td>9</td><td>60</td><td>180</td></tr><tr><td>synthetic-dynamic-gnn</td><td>complete</td><td>2</td><td>6</td><td>60</td><td>180</td></tr><tr><td>stanford-two-hop-ols</td><td>complete</td><td>3</td><td>15</td><td>11586</td><td>568309</td></tr><tr><td>stanford-cluster-baseline-ols</td><td>complete</td><td>3</td><td>15</td><td>11586</td><td>568309</td></tr></table></div><h2>Evidence and interpretation</h2><p>Small-run metrics are exploratory diagnostics of the configured pipeline, not confirmatory evidence for the paper. In particular, the GNN runs use only 4 or 8 epochs and 2 or 3 repetitions: poor estimates, large errors or reversals are retained rather than filtered. OLS and GNN results from different configurations are not a controlled estimator comparison.</p><h3>synthetic-ols</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>8</td><td>2</td><td>1.00276</td><td>-0.997238</td><td>0.0649398</td><td>0.9987</td><td>[-1.05528, -0.939198]</td></tr><tr><td>merge-2</td><td>8</td><td>2</td><td>1.0713</td><td>-0.928701</td><td>0.034416</td><td>0.863671</td><td>[-0.959461, -0.897942]</td></tr><tr><td>merge-3</td><td>8</td><td>2</td><td>1.13434</td><td>-0.865659</td><td>0.0327464</td><td>0.750437</td><td>[-0.894926, -0.836392]</td></tr></tbody></table></div><h3>synthetic-gnn</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>3</td><td>2</td><td>0.0155333</td><td>-1.98447</td><td>8.06698e-05</td><td>3.93811</td><td>[-1.98471, -1.98422]</td></tr><tr><td>merge-2</td><td>3</td><td>2</td><td>0.0782968</td><td>-1.9217</td><td>0.000432227</td><td>3.69294</td><td>[-1.92302, -1.92039]</td></tr><tr><td>merge-3</td><td>3</td><td>2</td><td>0.130674</td><td>-1.86933</td><td>0.000804912</td><td>3.49438</td><td>[-1.87178, -1.86688]</td></tr></tbody></table></div><h3>synthetic-dynamic-gnn</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>2</td><td>2</td><td>-0.00765914</td><td>-2.00766</td><td>0.00019592</td><td>4.0307</td><td>[-2.01015, -2.00517]</td></tr><tr><td>merge-2</td><td>2</td><td>2</td><td>0.0105729</td><td>-1.98943</td><td>0.000322402</td><td>3.95782</td><td>[-1.99352, -1.98533]</td></tr><tr><td>merge-3</td><td>2</td><td>2</td><td>0.024949</td><td>-1.97505</td><td>0.000660062</td><td>3.90083</td><td>[-1.98344, -1.96666]</td></tr></tbody></table></div><h3>stanford-two-hop-ols</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>3</td><td>2.4891</td><td>0.998772</td><td>-1.49033</td><td>0.00281593</td><td>2.22108</td><td>[-1.49889, -1.48176]</td></tr><tr><td>merge-2</td><td>3</td><td>2.4891</td><td>1.09951</td><td>-1.38959</td><td>0.00221658</td><td>1.93096</td><td>[-1.39633, -1.38284]</td></tr><tr><td>merge-3</td><td>3</td><td>2.4891</td><td>1.20096</td><td>-1.28814</td><td>0.00260038</td><td>1.65931</td><td>[-1.29605, -1.28023]</td></tr><tr><td>merge-4</td><td>3</td><td>2.4891</td><td>1.26297</td><td>-1.22613</td><td>0.00276386</td><td>1.5034</td><td>[-1.23454, -1.21772]</td></tr><tr><td>merge-5</td><td>3</td><td>2.4891</td><td>1.31134</td><td>-1.17776</td><td>0.00291521</td><td>1.38713</td><td>[-1.18663, -1.16889]</td></tr></tbody></table></div><h3>stanford-cluster-baseline-ols</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>baseline+0.02</td><td>3</td><td>2</td><td>1.3926</td><td>-0.607399</td><td>0.161518</td><td>0.395021</td><td>[-1.09881, -0.115992]</td></tr><tr><td>baseline+0.05</td><td>3</td><td>2</td><td>1.37836</td><td>-0.621637</td><td>0.0983293</td><td>0.396101</td><td>[-0.920797, -0.322476]</td></tr><tr><td>baseline+0.1</td><td>3</td><td>2</td><td>1.40992</td><td>-0.590083</td><td>0.0546118</td><td>0.35118</td><td>[-0.756235, -0.42393]</td></tr><tr><td>baseline+0.25</td><td>3</td><td>2</td><td>1.51922</td><td>-0.480781</td><td>0.0452264</td><td>0.233196</td><td>[-0.618379, -0.343183]</td></tr><tr><td>baseline+0.5</td><td>3</td><td>2</td><td>1.62015</td><td>-0.379849</td><td>0.00152383</td><td>0.144287</td><td>[-0.384485, -0.375212]</td></tr></tbody></table></div><h2>Data provenance and scientific deviations</h2><p>The repository Stanford edge file has 11,586 nodes and 568,309 undirected edges. The current deterministic partition contains 197 communities; the manuscript lists 192. Canonical ordering and the recorded NetworkX version define this run’s partition. Historical arrays were preserved and not loaded for validation, so no claim is made about their completion status or correctness.</p><p>The static estimand is the noise-averaged difference between global treatment and control on the evaluation graph. Assignment and noise use separate seed streams, and merge groups share their underlying stage data. No train/test split, model-selection sweep or unreported exclusion was performed. Complete configuration, imported versions, graph counts, selected repetition IDs and failure/resume records are embedded in each case.</p><details><summary>Complete migration audit and scenario mapping</summary><pre># Migration from the original notebooks
+</style></head><body><main><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Engineering evidence</div><h1>A reproducible experiment system,<br>with explicit scientific boundaries.</h1><span class="pill">VALIDATION PASSED</span><p class="lede">64 tests, 5 bounded execution cases, 69 inspectable estimates. This report records the system refactor and its verification; it does not claim to reproduce the paper’s numerical tables.</p></header><h2>What was changed and why</h2><p>The original repository distributed experimental logic across 37 notebooks with duplicated graph loading, randomization, outcome functions, model training and result handling. The user requested maintainability and reproducibility, a polished NeurIPS 2026 README, and a push back to the same repository. The latest supplied manuscript defines the intended experimental settings.</p><p>The maintained <code>rampup</code> package now separates those responsibilities and exposes a configuration-driven CLI. Historical notebooks and result arrays remain available in place. The new engine corrects node/feature alignment and dynamic-graph forwarding, records realized experimental designs, and commits complete repetitions atomically. Each run includes its own offline report.</p><h2>Frozen verification design and gates</h2><p>The confirmatory engineering checks are numerical tests on hand-computed fixtures, real GNN stage-graph/determinism tests, recovery/corruption/concurrency tests, CLI integration, all six outcome families across four merge/level combinations, and a distributable wheel build. Acceptance requires a zero test/build exit code and valid complete records for every execution case. No accuracy threshold or paper-effect confirmation is imposed on small smoke runs.</p><p>The five execution cases were chosen before execution to cover OLS, GNN, dynamic stage graphs, sparse two-hop interference on Stanford, and the near-zero cluster baseline. Their seed is 2026; GNN initialization uses seed 2. Synthetic cases use 60 nodes and three proportions; real cases use the five paper proportions. Full frozen configurations and exact per-case evidence are embedded below.</p><div class="scroll"><table><tr><th>Case</th><th>Status</th><th>Repetitions</th><th>Estimates</th><th>Nodes</th><th>Initial edges</th></tr><tr><td>synthetic-ols</td><td>complete</td><td>8</td><td>24</td><td>60</td><td>180</td></tr><tr><td>synthetic-gnn</td><td>complete</td><td>3</td><td>9</td><td>60</td><td>180</td></tr><tr><td>synthetic-dynamic-gnn</td><td>complete</td><td>2</td><td>6</td><td>60</td><td>180</td></tr><tr><td>stanford-two-hop-ols</td><td>complete</td><td>3</td><td>15</td><td>11586</td><td>568309</td></tr><tr><td>stanford-cluster-baseline-ols</td><td>complete</td><td>3</td><td>15</td><td>11586</td><td>568309</td></tr></table></div><h2>Evidence and interpretation</h2><p>Small-run metrics are exploratory diagnostics of the configured pipeline, not confirmatory evidence for the paper. In particular, the GNN runs use only 4 or 8 epochs and 2 or 3 repetitions: poor estimates, large errors or reversals are retained rather than filtered. OLS and GNN results from different configurations are not a controlled estimator comparison.</p><h3>synthetic-ols</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>8</td><td>2</td><td>1.00276</td><td>-0.997238</td><td>0.0649398</td><td>0.9987</td><td>[-1.05528, -0.939198]</td></tr><tr><td>merge-2</td><td>8</td><td>2</td><td>1.0713</td><td>-0.928701</td><td>0.034416</td><td>0.863671</td><td>[-0.959461, -0.897942]</td></tr><tr><td>merge-3</td><td>8</td><td>2</td><td>1.13434</td><td>-0.865659</td><td>0.0327464</td><td>0.750437</td><td>[-0.894926, -0.836392]</td></tr></tbody></table></div><h3>synthetic-gnn</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>3</td><td>2</td><td>0.0155333</td><td>-1.98447</td><td>8.06698e-05</td><td>3.93811</td><td>[-1.98471, -1.98422]</td></tr><tr><td>merge-2</td><td>3</td><td>2</td><td>0.0782968</td><td>-1.9217</td><td>0.000432227</td><td>3.69294</td><td>[-1.92302, -1.92039]</td></tr><tr><td>merge-3</td><td>3</td><td>2</td><td>0.130674</td><td>-1.86933</td><td>0.000804912</td><td>3.49438</td><td>[-1.87178, -1.86688]</td></tr></tbody></table></div><h3>synthetic-dynamic-gnn</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>2</td><td>2</td><td>-0.00765914</td><td>-2.00766</td><td>0.00019592</td><td>4.0307</td><td>[-2.01015, -2.00517]</td></tr><tr><td>merge-2</td><td>2</td><td>2</td><td>0.0105729</td><td>-1.98943</td><td>0.000322402</td><td>3.95782</td><td>[-1.99352, -1.98533]</td></tr><tr><td>merge-3</td><td>2</td><td>2</td><td>0.024949</td><td>-1.97505</td><td>0.000660062</td><td>3.90083</td><td>[-1.98344, -1.96666]</td></tr></tbody></table></div><h3>stanford-two-hop-ols</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>merge-1</td><td>3</td><td>2.4891</td><td>0.998772</td><td>-1.49033</td><td>0.00281593</td><td>2.22108</td><td>[-1.49889, -1.48176]</td></tr><tr><td>merge-2</td><td>3</td><td>2.4891</td><td>1.09951</td><td>-1.38959</td><td>0.00221658</td><td>1.93096</td><td>[-1.39633, -1.38284]</td></tr><tr><td>merge-3</td><td>3</td><td>2.4891</td><td>1.20096</td><td>-1.28814</td><td>0.00260038</td><td>1.65931</td><td>[-1.29605, -1.28023]</td></tr><tr><td>merge-4</td><td>3</td><td>2.4891</td><td>1.26297</td><td>-1.22613</td><td>0.00276386</td><td>1.5034</td><td>[-1.23454, -1.21772]</td></tr><tr><td>merge-5</td><td>3</td><td>2.4891</td><td>1.31134</td><td>-1.17776</td><td>0.00291521</td><td>1.38713</td><td>[-1.18663, -1.16889]</td></tr></tbody></table></div><h3>stanford-cluster-baseline-ols</h3><div class="scroll"><table><thead><tr><th>Merged stages</th><th>MC n</th><th>True GATE</th><th>Mean estimate</th><th>Bias</th><th>Std</th><th>MSE</th><th>95% MC CI: bias</th></tr></thead><tbody><tr><td>baseline+0.02</td><td>3</td><td>2</td><td>1.3926</td><td>-0.607399</td><td>0.161518</td><td>0.395021</td><td>[-1.09881, -0.115992]</td></tr><tr><td>baseline+0.05</td><td>3</td><td>2</td><td>1.37836</td><td>-0.621637</td><td>0.0983293</td><td>0.396101</td><td>[-0.920797, -0.322476]</td></tr><tr><td>baseline+0.1</td><td>3</td><td>2</td><td>1.40992</td><td>-0.590083</td><td>0.0546118</td><td>0.35118</td><td>[-0.756235, -0.42393]</td></tr><tr><td>baseline+0.25</td><td>3</td><td>2</td><td>1.51922</td><td>-0.480781</td><td>0.0452264</td><td>0.233196</td><td>[-0.618379, -0.343183]</td></tr><tr><td>baseline+0.5</td><td>3</td><td>2</td><td>1.62015</td><td>-0.379849</td><td>0.00152383</td><td>0.144287</td><td>[-0.384485, -0.375212]</td></tr></tbody></table></div><h2>Data provenance and scientific deviations</h2><p>The repository Stanford edge file has 11,586 nodes and 568,309 undirected edges. The current deterministic partition contains 197 communities; the manuscript lists 192. Canonical ordering and the recorded NetworkX version define this run’s partition. Historical arrays were preserved and not loaded for validation, so no claim is made about their completion status or correctness.</p><p>The static estimand is the noise-averaged difference between global treatment and control on the evaluation graph. Assignment and noise use separate seed streams, and merge groups share their underlying stage data. No train/test split, model-selection sweep or unreported exclusion was performed. Complete configuration, imported versions, graph counts, selected repetition IDs and failure/resume records are embedded in each case.</p><details><summary>Complete migration audit and scenario mapping</summary><pre># Migration from the original notebooks
 
 The original 37 notebooks, `Dataset/`, `Result/` and `table_output.py` remain at their original paths. They are a historical record; the maintained execution interface is now `python -m rampup`. Saved `.pkl` arrays are not loaded or reinterpreted by the new runner. Legacy notebooks may depend on cell order, missing intermediate files and their original package environment.
 
@@ -59,23 +59,25 @@ The checked-in Stanford file validates to **11,586 nodes and 568,309 undirected 
 
 ## Resume boundaries
 
-Resume requires identical configuration, imported dependency versions, data filename/size/mtime, graph counts, node and cluster mapping, merge definitions and source Git revision. Repetitions use separate deterministic streams, so recomputing a missing repetition does not change any completed result. Exact numerical resume assumes unchanged implementation and a consistent execution environment; the metadata is lightweight provenance, not a cryptographic tamper-proof archive. Commit implementation changes before starting long studies. A report rebuilt from corrupt records is prominently marked invalid and publishes no aggregate results.
+Resume requires identical configuration, imported dependency versions, data filename/size/mtime, graph counts, node and cluster mapping, merge definitions, source Git revision and package-source fingerprint. Each checkpoint carries the frozen execution identity, so records from different outcome models cannot be silently combined even when their seeds, groups and true GATE happen to match. Repetitions use separate deterministic streams, so recomputing a missing repetition does not change any completed result. One aggregate fingerprint of the small Python package detects source edits even without a Git repository; datasets are not exhaustively hashed. This protects against accidental evidence mixing, not deliberate tampering or in-memory monkey-patching. Commit implementation changes before starting long studies.
+
+A report rebuilt from corrupt records is prominently marked invalid and publishes no aggregate results. Report generation and execution share the run lock. Cached engineering validation additionally requires all expected repetitions and the current implementation/runtime/data identity; a stale `complete` flag is insufficient. New runs use checkpoint schema 2. Early development outputs without execution identities cannot be resumed; preserve their historical reports and rerun into a new directory.
 </pre></details><h2>Exact verification record</h2><pre>[
   {
     &quot;command&quot;: &quot;python -m pytest -q&quot;,
     &quot;exit_code&quot;: 0,
-    &quot;elapsed_seconds&quot;: 26.925,
-    &quot;stdout&quot;: &quot;..........................................................               [100%]\n58 passed in 25.49s\n&quot;,
+    &quot;elapsed_seconds&quot;: 17.665,
+    &quot;stdout&quot;: &quot;................................................................         [100%]\n64 passed in 16.35s\n&quot;,
     &quot;stderr&quot;: &quot;&quot;
   },
   {
-    &quot;command&quot;: &quot;python -m pip wheel --no-deps --no-build-isolation --no-cache-dir --wheel-dir [local path] .&quot;,
+    &quot;command&quot;: &quot;python -m pip wheel --no-deps --no-build-isolation --no-cache-dir --wheel-dir outputs/refactor-validation-v2/wheels .&quot;,
     &quot;exit_code&quot;: 0,
-    &quot;elapsed_seconds&quot;: 4.457,
-    &quot;stdout&quot;: &quot;Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple\nProcessing [local path]\n  Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status &#x27;done&#x27;\nBuilding wheels for collected packages: just-ramp-up\n  Building wheel for just-ramp-up (pyproject.toml): started\n  Building wheel for just-ramp-up (pyproject.toml): finished with status &#x27;done&#x27;\n  Created wheel for just-ramp-up: filename=just_ramp_up-0.1.0-py3-none-any.whl size=25735 sha256=9abed6a0cad0a381e2821400dbc3e9b5e03e89c22a5a565f89440d3b08bdeb87\n  Stored in directory: [local path]\nSuccessfully built just-ramp-up\n&quot;,
+    &quot;elapsed_seconds&quot;: 4.153,
+    &quot;stdout&quot;: &quot;Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple\nProcessing [local path]\n  Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status &#x27;done&#x27;\nBuilding wheels for collected packages: just-ramp-up\n  Building wheel for just-ramp-up (pyproject.toml): started\n  Building wheel for just-ramp-up (pyproject.toml): finished with status &#x27;done&#x27;\n  Created wheel for just-ramp-up: filename=just_ramp_up-0.1.0-py3-none-any.whl size=26783 sha256=b193c4f5275ad685155fba9fdf60e32651657115ff5e30b50577e378c8a66d8e\n  Stored in directory: [local path]\nSuccessfully built just-ramp-up\n&quot;,
     &quot;stderr&quot;: &quot;&quot;
   }
-]</pre><p>The first implementation checks intentionally failed while the new modules were absent. Subsequent red/green cycles exposed and fixed an impossible one-entity baseline on tiny staggered designs and missing validation of stored treatment-count diagnostics. One square-root numerical fixture was corrected after its handwritten expectation omitted its configured factor of two; the production formula was already correct. No historical experiment outcomes were substituted into these checks.</p><h2>Embedded experiment reports</h2><p>Each section contains the full run configuration, metrics, uncertainty formulas, stage diagnostics, execution attempts, limitations, raw estimates and a machine-readable handoff. All content is embedded; no network, server or sibling file is needed.</p><details><summary>synthetic-ols — complete embedded experiment report</summary><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Reproducible experiments</div><h1>Ramp-up experiment report</h1><span class="pill ">COMPLETE</span><span class="pill">OLS · linear</span><p class="lede">Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.</p></header><section><h2>Execution outcome</h2><p>Run <code>synthetic-ols</code> contains 8 validated complete repetitions out of 8 requested, producing 24 estimates. Status is derived from both the execution record and the available checkpoints.</p><div class="metrics"><div class="metric"><strong>8</strong><span>Complete repetitions</span></div><div class="metric"><strong>24</strong><span>Estimate records</span></div><div class="metric"><strong>60</strong><span>Graph nodes</span></div><div class="metric"><strong>180</strong><span>Initial edges</span></div></div></section><section><h2>Objective and experimental design</h2><p>GATE is the difference between mean potential outcomes under global treatment and global control. The study examines whether training a regression model on multiple treatment proportions improves this extrapolation under network interference. These runs quantify configured scenarios; no automatic hypothesis acceptance gate is imposed.</p><p>Design reference: the supplied NeurIPS 2026 manuscript, <em>Just Ramp-Up: Debiasing Regression-based Estimator for A/B Tests under Network Interference</em>, simulation study and detailed-experiment appendices. The linked preprint may retain its earlier title: <a href="https://arxiv.org/abs/2410.12740">arXiv:2410.12740</a>.</p><p>Each repetition has independent assignment and noise random streams derived from its root seed and repetition ID. Stages are generated once and reused across merge groups. Complete randomization selects floor(p × entity count) entities; cluster assignments preserve membership. A one-entity baseline differs from exact global control. The latest selected stage supplies the graph used for counterfactual evaluation.</p><h3>Frozen configuration</h3><pre>{
+]</pre><p>The first implementation checks intentionally failed while the new modules were absent. Subsequent red/green cycles exposed and fixed an impossible one-entity baseline on tiny staggered designs and missing validation of stored treatment-count diagnostics. One square-root numerical fixture was corrected after its handwritten expectation omitted its configured factor of two; the production formula was already correct. No historical experiment outcomes were substituted into these checks.</p><p>Independent review reproduced foreign-configuration checkpoint acceptance, unchanged-commit source drift, incomplete-cache acceptance, and concurrent report-write collisions. Regression tests first reproduced those failures. The delivered system binds each checkpoint to its frozen configuration and execution provenance, checks one aggregate package-source fingerprint at execution boundaries, requires the full validated repetition set for cache acceptance, and locks report generation. The bounded cases were rerun after these changes; earlier development outputs are not substituted into this evidence.</p><h2>Embedded experiment reports</h2><p>Each section contains the full run configuration, metrics, uncertainty formulas, stage diagnostics, execution attempts, limitations, raw estimates and a machine-readable handoff. All content is embedded; no network, server or sibling file is needed.</p><details><summary>synthetic-ols — complete embedded experiment report</summary><header><div class="eyebrow">Just Ramp-Up · NeurIPS 2026 · Reproducible experiments</div><h1>Ramp-up experiment report</h1><span class="pill ">COMPLETE</span><span class="pill">OLS · linear</span><p class="lede">Engineering smoke test of the experiment pipeline; not a reproduction of the paper&#x27;s numerical results.</p></header><section><h2>Execution outcome</h2><p>Run <code>synthetic-ols</code> contains 8 validated complete repetitions out of 8 requested, producing 24 estimates. Status is derived from both the execution record and the available checkpoints.</p><div class="metrics"><div class="metric"><strong>8</strong><span>Complete repetitions</span></div><div class="metric"><strong>24</strong><span>Estimate records</span></div><div class="metric"><strong>60</strong><span>Graph nodes</span></div><div class="metric"><strong>180</strong><span>Initial edges</span></div></div></section><section><h2>Objective and experimental design</h2><p>GATE is the difference between mean potential outcomes under global treatment and global control. The study examines whether training a regression model on multiple treatment proportions improves this extrapolation under network interference. These runs quantify configured scenarios; no automatic hypothesis acceptance gate is imposed.</p><p>Design reference: the supplied NeurIPS 2026 manuscript, <em>Just Ramp-Up: Debiasing Regression-based Estimator for A/B Tests under Network Interference</em>, simulation study and detailed-experiment appendices. The linked preprint may retain its earlier title: <a href="https://arxiv.org/abs/2410.12740">arXiv:2410.12740</a>.</p><p>Each repetition has independent assignment and noise random streams derived from its root seed and repetition ID. Stages are generated once and reused across merge groups. Complete randomization selects floor(p × entity count) entities; cluster assignments preserve membership. A one-entity baseline differs from exact global control. The latest selected stage supplies the graph used for counterfactual evaluation.</p><h3>Frozen configuration</h3><pre>{
   &quot;dataset&quot;: &quot;demo&quot;,
   &quot;outcome&quot;: &quot;linear&quot;,
   &quot;level&quot;: &quot;unit&quot;,
@@ -216,9 +218,11 @@ Resume requires identical configuration, imported dependency versions, data file
     &quot;networkx&quot;: &quot;3.4.2&quot;
   },
   &quot;git&quot;: {
-    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-    &quot;dirty&quot;: true
+    &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+    &quot;dirty&quot;: false
   },
+  &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+  &quot;execution_identity&quot;: &quot;sha256:fa5ea626221b842fda2d22e59ed5b10a3224d481edae339ce08ad593baeb99c9&quot;,
   &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
 }</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
   {
@@ -533,14 +537,18 @@ Resume requires identical configuration, imported dependency versions, data file
       }
     ]
   }
-]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish and carries the frozen execution identity. Resume validates configuration, package-source fingerprint, runtime versions, source file metadata, graph and group identities, and completed records. Reports and execution share a run lock. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions. Dataset provenance uses filename, size and modification time, not a content hash; these checks prevent accidental mixing, not deliberate tampering.</p><pre>[
   {
-    &quot;started_at&quot;: &quot;2026-09-27T06:59:23+00:00&quot;,
+    &quot;started_at&quot;: &quot;2026-09-27T07:13:42+00:00&quot;,
     &quot;resume&quot;: false,
     &quot;status&quot;: &quot;complete&quot;,
     &quot;completed_this_attempt&quot;: 8,
-    &quot;finished_at&quot;: &quot;2026-09-27T06:59:23+00:00&quot;,
-    &quot;elapsed_seconds&quot;: 0.015424
+    &quot;git&quot;: {
+      &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+      &quot;dirty&quot;: false
+    },
+    &quot;finished_at&quot;: &quot;2026-09-27T07:13:42+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 0.039975
   }
 ]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
   {
@@ -1025,9 +1033,11 @@ Resume requires identical configuration, imported dependency versions, data file
     &quot;dgl&quot;: &quot;2.3.0&quot;
   },
   &quot;git&quot;: {
-    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-    &quot;dirty&quot;: true
+    &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+    &quot;dirty&quot;: false
   },
+  &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+  &quot;execution_identity&quot;: &quot;sha256:5d9aeda5319f61b5f2a778d0adc144ff053f62239c587485dddbe32a74eaab67&quot;,
   &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
 }</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
   {
@@ -1147,14 +1157,18 @@ Resume requires identical configuration, imported dependency versions, data file
       }
     ]
   }
-]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish and carries the frozen execution identity. Resume validates configuration, package-source fingerprint, runtime versions, source file metadata, graph and group identities, and completed records. Reports and execution share a run lock. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions. Dataset provenance uses filename, size and modification time, not a content hash; these checks prevent accidental mixing, not deliberate tampering.</p><pre>[
   {
-    &quot;started_at&quot;: &quot;2026-09-27T06:59:23+00:00&quot;,
+    &quot;started_at&quot;: &quot;2026-09-27T07:13:42+00:00&quot;,
     &quot;resume&quot;: false,
     &quot;status&quot;: &quot;complete&quot;,
     &quot;completed_this_attempt&quot;: 3,
-    &quot;finished_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
-    &quot;elapsed_seconds&quot;: 3.658088
+    &quot;git&quot;: {
+      &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+      &quot;dirty&quot;: false
+    },
+    &quot;finished_at&quot;: &quot;2026-09-27T07:13:46+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 3.757702
   }
 ]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
   {
@@ -1474,9 +1488,11 @@ Resume requires identical configuration, imported dependency versions, data file
     &quot;dgl&quot;: &quot;2.3.0&quot;
   },
   &quot;git&quot;: {
-    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-    &quot;dirty&quot;: true
+    &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+    &quot;dirty&quot;: false
   },
+  &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+  &quot;execution_identity&quot;: &quot;sha256:ba979dd6dd2b7588344b5be9f384024e837c42e83d947eb1ee90108b589b8221&quot;,
   &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
 }</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
   {
@@ -1557,14 +1573,18 @@ Resume requires identical configuration, imported dependency versions, data file
       }
     ]
   }
-]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish and carries the frozen execution identity. Resume validates configuration, package-source fingerprint, runtime versions, source file metadata, graph and group identities, and completed records. Reports and execution share a run lock. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions. Dataset provenance uses filename, size and modification time, not a content hash; these checks prevent accidental mixing, not deliberate tampering.</p><pre>[
   {
-    &quot;started_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
+    &quot;started_at&quot;: &quot;2026-09-27T07:13:46+00:00&quot;,
     &quot;resume&quot;: false,
     &quot;status&quot;: &quot;complete&quot;,
     &quot;completed_this_attempt&quot;: 2,
-    &quot;finished_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
-    &quot;elapsed_seconds&quot;: 0.073987
+    &quot;git&quot;: {
+      &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+      &quot;dirty&quot;: false
+    },
+    &quot;finished_at&quot;: &quot;2026-09-27T07:13:46+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 0.119713
   }
 ]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
   {
@@ -1910,9 +1930,11 @@ Resume requires identical configuration, imported dependency versions, data file
     &quot;networkx&quot;: &quot;3.4.2&quot;
   },
   &quot;git&quot;: {
-    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-    &quot;dirty&quot;: true
+    &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+    &quot;dirty&quot;: false
   },
+  &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+  &quot;execution_identity&quot;: &quot;sha256:fecb1f3099ba4e201ec58be89a35fb587ea6e1e07171a155285178313d5dfe13&quot;,
   &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
 }</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
   {
@@ -2092,14 +2114,18 @@ Resume requires identical configuration, imported dependency versions, data file
       }
     ]
   }
-]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish and carries the frozen execution identity. Resume validates configuration, package-source fingerprint, runtime versions, source file metadata, graph and group identities, and completed records. Reports and execution share a run lock. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions. Dataset provenance uses filename, size and modification time, not a content hash; these checks prevent accidental mixing, not deliberate tampering.</p><pre>[
   {
-    &quot;started_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
+    &quot;started_at&quot;: &quot;2026-09-27T07:13:46+00:00&quot;,
     &quot;resume&quot;: false,
     &quot;status&quot;: &quot;complete&quot;,
     &quot;completed_this_attempt&quot;: 3,
-    &quot;finished_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
-    &quot;elapsed_seconds&quot;: 0.207776
+    &quot;git&quot;: {
+      &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+      &quot;dirty&quot;: false
+    },
+    &quot;finished_at&quot;: &quot;2026-09-27T07:13:47+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 0.245592
   }
 ]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
   {
@@ -2593,9 +2619,11 @@ Resume requires identical configuration, imported dependency versions, data file
     &quot;networkx&quot;: &quot;3.4.2&quot;
   },
   &quot;git&quot;: {
-    &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-    &quot;dirty&quot;: true
+    &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+    &quot;dirty&quot;: false
   },
+  &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+  &quot;execution_identity&quot;: &quot;sha256:f315bfc9ede0edd863f4e947476d13bfd7b79b6b214e15877a53a437c3708802&quot;,
   &quot;seed_schedule&quot;: &quot;SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)&quot;
 }</pre><details><summary>Realized treatment counts, exposure variation and stage graphs</summary><pre>[
   {
@@ -2805,14 +2833,18 @@ Resume requires identical configuration, imported dependency versions, data file
       }
     ]
   }
-]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p><pre>[
+]</pre></details></section><section><h2>Exact execution record</h2><p>Each checkpoint is committed atomically only after all merge groups finish and carries the frozen execution identity. Resume validates configuration, package-source fingerprint, runtime versions, source file metadata, graph and group identities, and completed records. Reports and execution share a run lock. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions. Dataset provenance uses filename, size and modification time, not a content hash; these checks prevent accidental mixing, not deliberate tampering.</p><pre>[
   {
-    &quot;started_at&quot;: &quot;2026-09-27T06:59:27+00:00&quot;,
+    &quot;started_at&quot;: &quot;2026-09-27T07:13:47+00:00&quot;,
     &quot;resume&quot;: false,
     &quot;status&quot;: &quot;complete&quot;,
     &quot;completed_this_attempt&quot;: 3,
-    &quot;finished_at&quot;: &quot;2026-09-27T06:59:36+00:00&quot;,
-    &quot;elapsed_seconds&quot;: 8.619771
+    &quot;git&quot;: {
+      &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+      &quot;dirty&quot;: false
+    },
+    &quot;finished_at&quot;: &quot;2026-09-27T07:13:55+00:00&quot;,
+    &quot;elapsed_seconds&quot;: 8.780897
   }
 ]</pre></section><section><h2>Limitations and next step</h2><ul><li>Small repetition/epoch counts verify execution only; accuracy rankings and paper-level scientific conclusions are unsupported.</li><li>A corrected implementation changes historical node alignment, rounding and random streams; historical numerical equality is not claimed.</li><li>Uncertainty intervals describe Monte Carlo error conditional on this graph, configuration and model initialization; they are not causal confidence intervals for a real deployment.</li><li>Groups reuse stage data within each repetition and are dependent; marginal intervals do not test between-group differences.</li><li>GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.</li></ul><p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p></section><section><h2>Reproducibility and artifact index</h2><p>The run directory contains <code>config.json</code>, <code>manifest.json</code>, <code>node_ids.json</code>, optional <code>clusters.json</code>, atomic <code>replicates/NNNNNN.json</code> files and <code>report.html</code>. This HTML embeds the reviewed metrics, raw estimates, diagnostics and execution record; sibling files and a network connection are not required to read it. Source basenames are retained while absolute local paths are removed.</p><details><summary>Raw repetition records</summary><pre>[
   {
@@ -3093,12 +3125,12 @@ Resume requires identical configuration, imported dependency versions, data file
     &quot;GNN architecture is retained, but library versions can affect optimization. No full paper replication gate is evaluated automatically.&quot;
   ],
   &quot;next_authorized_step&quot;: &quot;Inspect configuration and diagnostics before a full replication run; do not infer unrun paper outcomes.&quot;
-}</pre></section><footer>Standalone report · No external scripts, fonts, styles or images · Generated from validated experiment artifacts</footer></details><h2>Reproducibility and handoff</h2><p>Rebuild with <code>python scripts/validate_refactor.py --output outputs/refactor-validation --report reports/refactor-validation.html</code> from a compatible environment. Use a new output directory for new execution; <code>--reuse</code> reuses validated cached case records and reruns test/build checks. The evidence JSON and per-case artifacts live under the selected output directory. Source paths and local task metadata are sanitized in this shareable HTML.</p><p>The code and README still require the recorded independent code review and remote-push verification; those repository operations are distinct from the completed local experiment evidence. Full paper-sized runs, historical partition recovery and supplementary missing-source experiments are separate follow-up work.</p><h3>Machine-readable handoff</h3><pre id="handoff">{
+}</pre></section><footer>Standalone report · No external scripts, fonts, styles or images · Generated from validated experiment artifacts</footer></details><h2>Reproducibility and handoff</h2><p>Rebuild with <code>python scripts/validate_refactor.py --output outputs/refactor-validation --report reports/refactor-validation.html</code> from a compatible environment. Use a new output directory for new execution; <code>--reuse</code> reuses validated cached case records and reruns test/build checks. The evidence JSON and per-case artifacts live under the selected output directory. Source paths and local task metadata are sanitized in this shareable HTML.</p><p>Repository publication and its Git history are distinct from this timestamped experimental evidence. Full paper-sized runs, historical partition recovery and supplementary missing-source experiments are separate follow-up work.</p><h3>Machine-readable handoff</h3><pre id="handoff">{
   &quot;study_id&quot;: &quot;just-ramp-up-refactor-validation-2026-09-27&quot;,
   &quot;status&quot;: &quot;passed&quot;,
   &quot;frozen_claim&quot;: &quot;Engineering correctness and bounded smoke execution only; no published-table replication claim.&quot;,
   &quot;outcome_access&quot;: &quot;validated smoke outcomes read; historical Result arrays and full-paper outcomes not analyzed&quot;,
-  &quot;tests_passed&quot;: 58,
+  &quot;tests_passed&quot;: 64,
   &quot;completed_cases&quot;: 5,
   &quot;completed_repetitions&quot;: 19,
   &quot;estimate_records&quot;: 69,
@@ -3108,24 +3140,24 @@ Resume requires identical configuration, imported dependency versions, data file
     &quot;Node alignment, temporal assignment, baseline and RNG corrections change legacy behavior.&quot;,
     &quot;MII/Hájek/Lagrange/MIT8 supplementary reproductions remain outside implemented scope.&quot;
   ],
-  &quot;next_authorized_step&quot;: &quot;Finish independent review and push the refactor; full paper replication is a separate study.&quot;
+  &quot;next_authorized_step&quot;: &quot;Review the delivered evidence; commission full paper replication as a separate study.&quot;
 }</pre><details><summary>Complete validation metadata</summary><pre>{
-  &quot;generated_at&quot;: &quot;2026-09-27T06:59:36+00:00&quot;,
+  &quot;generated_at&quot;: &quot;2026-09-27T07:13:55+00:00&quot;,
   &quot;status&quot;: &quot;passed&quot;,
-  &quot;tests_passed&quot;: 58,
+  &quot;tests_passed&quot;: 64,
   &quot;checks&quot;: [
     {
       &quot;command&quot;: &quot;python -m pytest -q&quot;,
       &quot;exit_code&quot;: 0,
-      &quot;elapsed_seconds&quot;: 26.925,
-      &quot;stdout&quot;: &quot;..........................................................               [100%]\n58 passed in 25.49s\n&quot;,
+      &quot;elapsed_seconds&quot;: 17.665,
+      &quot;stdout&quot;: &quot;................................................................         [100%]\n64 passed in 16.35s\n&quot;,
       &quot;stderr&quot;: &quot;&quot;
     },
     {
-      &quot;command&quot;: &quot;python -m pip wheel --no-deps --no-build-isolation --no-cache-dir --wheel-dir [local path] .&quot;,
+      &quot;command&quot;: &quot;python -m pip wheel --no-deps --no-build-isolation --no-cache-dir --wheel-dir outputs/refactor-validation-v2/wheels .&quot;,
       &quot;exit_code&quot;: 0,
-      &quot;elapsed_seconds&quot;: 4.457,
-      &quot;stdout&quot;: &quot;Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple\nProcessing [local path]\n  Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status &#x27;done&#x27;\nBuilding wheels for collected packages: just-ramp-up\n  Building wheel for just-ramp-up (pyproject.toml): started\n  Building wheel for just-ramp-up (pyproject.toml): finished with status &#x27;done&#x27;\n  Created wheel for just-ramp-up: filename=just_ramp_up-0.1.0-py3-none-any.whl size=25735 sha256=9abed6a0cad0a381e2821400dbc3e9b5e03e89c22a5a565f89440d3b08bdeb87\n  Stored in directory: [local path]\nSuccessfully built just-ramp-up\n&quot;,
+      &quot;elapsed_seconds&quot;: 4.153,
+      &quot;stdout&quot;: &quot;Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple\nProcessing [local path]\n  Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status &#x27;done&#x27;\nBuilding wheels for collected packages: just-ramp-up\n  Building wheel for just-ramp-up (pyproject.toml): started\n  Building wheel for just-ramp-up (pyproject.toml): finished with status &#x27;done&#x27;\n  Created wheel for just-ramp-up: filename=just_ramp_up-0.1.0-py3-none-any.whl size=26783 sha256=b193c4f5275ad685155fba9fdf60e32651657115ff5e30b50577e378c8a66d8e\n  Stored in directory: [local path]\nSuccessfully built just-ramp-up\n&quot;,
       &quot;stderr&quot;: &quot;&quot;
     }
   ],
@@ -3215,9 +3247,11 @@ Resume requires identical configuration, imported dependency versions, data file
         &quot;networkx&quot;: &quot;3.4.2&quot;
       },
       &quot;git&quot;: {
-        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-        &quot;dirty&quot;: true
-      }
+        &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+        &quot;dirty&quot;: false
+      },
+      &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+      &quot;execution_identity&quot;: &quot;sha256:fa5ea626221b842fda2d22e59ed5b10a3224d481edae339ce08ad593baeb99c9&quot;
     },
     {
       &quot;case&quot;: &quot;synthetic-gnn&quot;,
@@ -3306,9 +3340,11 @@ Resume requires identical configuration, imported dependency versions, data file
         &quot;dgl&quot;: &quot;2.3.0&quot;
       },
       &quot;git&quot;: {
-        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-        &quot;dirty&quot;: true
-      }
+        &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+        &quot;dirty&quot;: false
+      },
+      &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+      &quot;execution_identity&quot;: &quot;sha256:5d9aeda5319f61b5f2a778d0adc144ff053f62239c587485dddbe32a74eaab67&quot;
     },
     {
       &quot;case&quot;: &quot;synthetic-dynamic-gnn&quot;,
@@ -3397,9 +3433,11 @@ Resume requires identical configuration, imported dependency versions, data file
         &quot;dgl&quot;: &quot;2.3.0&quot;
       },
       &quot;git&quot;: {
-        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-        &quot;dirty&quot;: true
-      }
+        &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+        &quot;dirty&quot;: false
+      },
+      &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+      &quot;execution_identity&quot;: &quot;sha256:ba979dd6dd2b7588344b5be9f384024e837c42e83d947eb1ee90108b589b8221&quot;
     },
     {
       &quot;case&quot;: &quot;stanford-two-hop-ols&quot;,
@@ -3526,9 +3564,11 @@ Resume requires identical configuration, imported dependency versions, data file
         &quot;networkx&quot;: &quot;3.4.2&quot;
       },
       &quot;git&quot;: {
-        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-        &quot;dirty&quot;: true
-      }
+        &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+        &quot;dirty&quot;: false
+      },
+      &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+      &quot;execution_identity&quot;: &quot;sha256:fecb1f3099ba4e201ec58be89a35fb587ea6e1e07171a155285178313d5dfe13&quot;
     },
     {
       &quot;case&quot;: &quot;stanford-cluster-baseline-ols&quot;,
@@ -3656,9 +3696,11 @@ Resume requires identical configuration, imported dependency versions, data file
         &quot;networkx&quot;: &quot;3.4.2&quot;
       },
       &quot;git&quot;: {
-        &quot;commit&quot;: &quot;8a23a02e0edfd65021933b8748b4a34264d5d989&quot;,
-        &quot;dirty&quot;: true
-      }
+        &quot;commit&quot;: &quot;ef6937cee56aef49084f7fb5e2d0eca713863ee9&quot;,
+        &quot;dirty&quot;: false
+      },
+      &quot;implementation&quot;: &quot;sha256:3496ee007e73d5d25a6a36e729c2e61c99cfb55a3c46acf6b4b954ab85eac74b&quot;,
+      &quot;execution_identity&quot;: &quot;sha256:f315bfc9ede0edd863f4e947476d13bfd7b79b6b214e15877a53a437c3708802&quot;
     }
   ],
   &quot;cache_reused&quot;: false

@@ -202,3 +202,16 @@ def test_public_report_writer_respects_run_lock(tmp_path, config):
         with pytest.raises(RuntimeError, match="another process"):
             render_report(run)
     assert (run / "report.html").read_bytes() == original
+
+
+@pytest.mark.parametrize("payload", [[], None])
+def test_non_object_checkpoint_replaces_stale_success_report(tmp_path, config, payload):
+    run = tmp_path / "run"
+    run_experiment(config, run)
+    (run / "replicates/000000.json").write_text(json.dumps(payload))
+    render_report(run)
+    assert ">INVALID</span>" in (run / "report.html").read_text()
+    with pytest.raises(ValueError, match="invalid checkpoint 000000.json"):
+        run_experiment(config, run, resume=True)
+    assert ">INVALID</span>" in (run / "report.html").read_text()
+    assert json.loads((run / "manifest.json").read_text())["status"] == "failed"

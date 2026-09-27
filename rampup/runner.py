@@ -172,6 +172,8 @@ def load_records(directory):
     for path in paths:
         try:
             payload = read_json(path)
+            if not isinstance(payload, dict):
+                raise ValueError("checkpoint must be a JSON object")
             if payload.get("execution_identity") != identity:
                 raise ValueError("execution identity mismatch; checkpoint belongs to another run definition")
             replicate = payload["replicate"]
