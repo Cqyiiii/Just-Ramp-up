@@ -1,0 +1,11 @@
+{
+  "dataset": "demo",
+  "outcome": "two_hop",
+  "level": "unit",
+  "merge": "suffix",
+  "stages": [0.1, 0.25, 0.5],
+  "estimator": "ols",
+  "repetitions": 5,
+  "seed": 2026,
+  "purpose": "smoke"
+}

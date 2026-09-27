@@ -1,0 +1,18 @@
+{
+  "dataset": "Dataset/socfb-Stanford3.mtx",
+  "outcome": "two_hop",
+  "level": "cluster",
+  "randomization": "complete",
+  "temporal": "staggered",
+  "merge": "baseline_pair",
+  "baseline": "one",
+  "stages": [0.02, 0.05, 0.1, 0.25, 0.5],
+  "estimator": "gnn",
+  "repetitions": 100,
+  "epochs": 400,
+  "learning_rate": 0.004,
+  "resolution": 10,
+  "cluster_seed": 10,
+  "r2": 0.5,
+  "purpose": "simulation"
+}
