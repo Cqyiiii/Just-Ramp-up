@@ -81,18 +81,20 @@ python -m rampup report outputs/linear-unit
 ```text
 outputs/my-study/
 ├── config.json          # effective frozen configuration
-├── manifest.json        # versions, source identity, counts, attempts and failures
+├── manifest.json        # versions, code/run identity, counts, attempts and failures
 ├── node_ids.json        # original ID for each canonical row
 ├── clusters.json        # baseline membership, only for cluster assignment
 ├── replicates/
-│   ├── 000000.json      # one complete repetition: seeds, diagnostics, estimates
+│   ├── 000000.json      # run identity, seeds, diagnostics and estimates
 │   └── ...
 └── report.html          # offline report with embedded evidence and handoff block
 ```
 
 Reports include exact estimates, graph-specific truth, signed bias, population standard deviation, empirical MSE and Monte Carlo intervals. Student-t intervals for bias use the sample standard error; MSE intervals use a normal approximation. These quantify Monte Carlo uncertainty, not uncertainty about deploying a real treatment. Comparisons share stage data within each repetition. Do not interpret marginal intervals as independent pairwise tests. The visible machine-readable handoff is in `<pre id="handoff">` and is derived from the same records as the tables.
 
-Checkpoints are written by atomic replacement and protected by an advisory lock. A process crash releases the lock. On resume, a missing full repetition is deterministically recomputed; corrupt or mismatched checkpoints fail rather than being silently discarded. Failures produce a report when the run configuration and manifest remain readable. Fix the underlying failure and use `--resume`; do not fill rows by hand.
+Checkpoints and reports are written by atomic replacement and protected by the same advisory run lock. A process crash releases the lock. On resume, a missing full repetition is deterministically recomputed; corrupt or mismatched checkpoints fail rather than being silently discarded. Every checkpoint carries an identity derived from its frozen configuration and execution metadata. One small package-source fingerprint detects changed implementations, including uncommitted edits and installed packages without Git metadata. Dataset identity remains a lightweight filename/size/mtime check, not a content hash or tamper-proof archive. Failures produce a report when the run configuration and manifest remain readable. Fix the underlying failure and use `--resume`; do not fill rows by hand.
+
+`python scripts/validate_refactor.py --reuse` rebuilds the engineering report only from complete validated case records, with the same implementation, runtime and data identity. Missing repetitions fail this gate even if an old manifest says `complete`. Historical reports can still be rebuilt with `python -m rampup report`; their recorded provenance remains visible. Schema 2 checkpoints require execution identities; development-era schema 1 outputs cannot be resumed and need a fresh output directory.
 
 ## Extending the system
 

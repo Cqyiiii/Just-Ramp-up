@@ -135,3 +135,70 @@ def test_cli_demo_and_report_work_without_notebooks(tmp_path):
     assert result.returncode == 0, result.stderr
     result = subprocess.run([sys.executable, "-m", "rampup", "run", "--config", "missing.json"], capture_output=True, text=True)
     assert result.returncode != 0
+
+
+def test_foreign_outcome_checkpoint_is_rejected_on_read_and_resume(tmp_path, config):
+    linear, quadratic = tmp_path / "linear", tmp_path / "quadratic"
+    run_experiment(config, linear)
+    run_experiment(replace(config, outcome="quadratic"), quadratic)
+    # Both outcomes have the same true GATE, groups, counts and seed schedule.
+    foreign = (quadratic / "replicates/000000.json").read_bytes()
+    (linear / "replicates/000000.json").write_bytes(foreign)
+    with pytest.raises(ValueError, match="identity"):
+        load_records(linear)
+    render_report(linear)
+    assert "INVALID" in (linear / "report.html").read_text()
+    with pytest.raises(ValueError, match="identity"):
+        run_experiment(config, linear, resume=True)
+
+
+def test_edited_frozen_configuration_cannot_relabel_checkpoints(tmp_path, config):
+    run = tmp_path / "run"
+    run_experiment(config, run)
+    (run / "config.json").write_text(json.dumps(replace(config, outcome="quadratic").to_dict()))
+    with pytest.raises(ValueError, match="identity"):
+        load_records(run)
+
+
+@pytest.mark.parametrize("git_available", [True, False])
+def test_resume_rejects_changed_package_source_with_same_git_identity(tmp_path, config, monkeypatch, git_available):
+    from rampup import runner
+    package = tmp_path / "package"
+    package.mkdir()
+    source = package / "estimators.py"
+    source.write_text("def estimate(): return 1\n")
+    monkeypatch.setattr(runner, "__file__", str(package / "runner.py"))
+    identity = {"commit": "unchanged" if git_available else None, "dirty": True if git_available else None}
+    monkeypatch.setattr(runner, "_git_identity", lambda: identity)
+    run = tmp_path / "run"
+    run_experiment(config, run)
+    first_bytes = (run / "replicates/000000.json").read_bytes()
+    (run / "replicates/000002.json").unlink()
+    source.write_text("def estimate(): return 101\n")
+    with pytest.raises(ValueError, match="implementation"):
+        run_experiment(config, run, resume=True)
+    assert (run / "replicates/000000.json").read_bytes() == first_bytes
+    assert not (run / "replicates/000002.json").exists()
+
+
+def test_cached_validation_rejects_missing_repetitions(tmp_path, config):
+    from scripts.validate_refactor import cached_case_summary
+    run = tmp_path / "run"
+    run_experiment(config, run)
+    summary = cached_case_summary("test", config, run)
+    assert summary["repetitions"] == 3 and summary["records"] == 9
+    (run / "replicates/000002.json").unlink()
+    with pytest.raises(ValueError, match="incomplete"):
+        cached_case_summary("test", config, run)
+    assert "INCOMPLETE" in (run / "report.html").read_text()
+
+
+def test_public_report_writer_respects_run_lock(tmp_path, config):
+    from rampup.runner import _writer_lock
+    run = tmp_path / "run"
+    run_experiment(config, run)
+    original = (run / "report.html").read_bytes()
+    with _writer_lock(run):
+        with pytest.raises(RuntimeError, match="another process"):
+            render_report(run)
+    assert (run / "report.html").read_bytes() == original

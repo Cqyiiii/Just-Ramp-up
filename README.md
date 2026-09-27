@@ -83,7 +83,7 @@ Copy a JSON preset to change the outcome, level or merging scheme. See the [comp
 
 - **Aligned graph data.** One canonical node order is used for adjacency, assignments, features and outcomes. Two-hop interference is computed sparsely, with closed walks removed.
 - **Explicit randomness.** Separate deterministic streams control assignments, outcome noise, graph evolution, clustering and model initialization. Stage data is reused across merge comparisons.
-- **Safe recovery.** Each repetition is committed atomically. Resume validates configuration, data identity, versions, graph mapping and checkpoints; unfinished rows are never treated as numerical zeros.
+- **Safe recovery.** Each repetition is committed atomically and bound to its frozen run definition. Resume validates configuration, code and data identity, versions, graph mapping and checkpoints; unfinished rows are never treated as numerical zeros.
 - **Inspectable evidence.** Every run emits signed bias, standard deviation, MSE, Monte Carlo uncertainty, raw estimates, stage diagnostics and an offline HTML report with a visible machine-readable handoff.
 
 ```bash

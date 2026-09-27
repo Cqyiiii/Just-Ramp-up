@@ -2,10 +2,12 @@
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import platform
 import subprocess
+import tempfile
 import time
 
 import networkx as nx
@@ -24,11 +26,21 @@ def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def write_json(path, value):
+def write_text_atomic(path, value):
     path = Path(path)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                     prefix=path.name + ".", suffix=".tmp", delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(value)
+            stream.close()
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def write_json(path, value):
+    write_text_atomic(path, json.dumps(value, indent=2, allow_nan=False) + "\n")
 
 
 def read_json(path):
@@ -73,6 +85,24 @@ def _git_identity():
         return {"commit": sha, "dirty": dirty}
     except (OSError, subprocess.CalledProcessError):
         return {"commit": None, "dirty": None}
+
+
+def _implementation_identity():
+    """One small package fingerprint per invocation, including uncommitted edits."""
+    root = Path(__file__).resolve().parent
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*.py")):
+        digest.update(path.relative_to(root).as_posix().encode() + b"\0")
+        digest.update(path.read_bytes() + b"\0")
+    return "sha256:" + digest.hexdigest()
+
+
+def _execution_identity(config, manifest):
+    frozen = {key: manifest[key] for key in
+              ("schema_version", "versions", "implementation", "source", "graph", "groups", "git")}
+    frozen["config"] = config.to_dict()
+    encoded = json.dumps(frozen, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 def _source_identity(config):
@@ -125,11 +155,25 @@ def load_records(directory):
     config = ExperimentConfig.from_dict(read_json(directory / "config.json"))
     manifest = read_json(directory / "manifest.json")
     groups = manifest.get("groups", [])
+    paths = sorted((directory / "replicates").glob("*.json"))
+    if manifest.get("schema_version") != 2:
+        raise ValueError("unsupported run schema; checkpoints require a frozen execution identity")
+    if groups or paths:
+        try:
+            identity = _execution_identity(config, manifest)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("frozen execution identity is missing or invalid") from exc
+        if manifest.get("execution_identity") != identity:
+            raise ValueError("frozen execution identity does not match configuration or provenance")
+    else:
+        return []  # A preparation failure has no initialized groups or outcomes.
     expected = {item["label"]: item for item in groups}
     records = []
-    for path in sorted((directory / "replicates").glob("*.json")):
+    for path in paths:
         try:
             payload = read_json(path)
+            if payload.get("execution_identity") != identity:
+                raise ValueError("execution identity mismatch; checkpoint belongs to another run definition")
             replicate = payload["replicate"]
             if (type(replicate) is not int or not 0 <= replicate < config.repetitions or
                     path.name != f"{replicate:06d}.json" or payload["seed"] != [config.seed, replicate]):
@@ -154,7 +198,21 @@ def load_records(directory):
     return records
 
 
-def _run_repetition(config, replicate, graphs, membership, groups):
+def load_complete_records(directory):
+    """Require the full validated repetition/group set before a completion gate."""
+    directory = Path(directory)
+    records = load_records(directory)
+    config = ExperimentConfig.from_dict(read_json(directory / "config.json"))
+    manifest = read_json(directory / "manifest.json")
+    completed = {row["replicate"] for row in records}
+    if (manifest["status"] != "complete" or completed != set(range(config.repetitions)) or
+            manifest["completed_replicates"] != len(completed) or
+            len(records) != config.repetitions * len(manifest.get("groups", []))):
+        raise ValueError("incomplete run: validated records do not satisfy the completion gate")
+    return records
+
+
+def _run_repetition(config, replicate, graphs, membership, groups, execution_identity):
     seed = np.random.SeedSequence([config.seed, replicate])
     assignment_seed, noise_seed = seed.spawn(2)
     z = assignments(config, graphs[0].n_nodes, membership, np.random.default_rng(assignment_seed))
@@ -175,7 +233,8 @@ def _run_repetition(config, replicate, graphs, membership, groups):
         estimate, loss = fit_estimate(selected, selected[-1].graph, config)
         rows.append({"replicate": replicate, "group": group["label"], "stage_indices": group["indices"],
                      "estimate": estimate, "truth": group["truth"], "train_loss": loss})
-    return {"replicate": replicate, "seed": [config.seed, replicate], "stages": diagnostics, "records": rows}
+    return {"replicate": replicate, "seed": [config.seed, replicate], "execution_identity": execution_identity,
+            "stages": diagnostics, "records": rows}
 
 
 def run_experiment(config, output_dir, resume=False):
@@ -192,28 +251,32 @@ def run_experiment(config, output_dir, resume=False):
             if read_json(output / "config.json") != config.to_dict():
                 raise ValueError("resume configuration differs from the frozen configuration")
             manifest = read_json(output / "manifest.json")
-            if manifest.get("schema_version") != 1:
+            if manifest.get("schema_version") != 2:
                 raise ValueError("unsupported run schema")
         else:
             write_json(output / "config.json", config.to_dict())
-            manifest = {"schema_version": 1, "run_id": output.name, "created_at": utc_now(),
+            manifest = {"schema_version": 2, "run_id": output.name, "created_at": utc_now(),
                         "status": "running", "attempts": [], "completed_replicates": 0,
                         "expected_replicates": config.repetitions, "git": _git_identity()}
         (output / "replicates").mkdir(exist_ok=True)
         started = time.monotonic()
-        attempt = {"started_at": utc_now(), "resume": resume, "status": "running", "completed_this_attempt": 0}
+        attempt = {"started_at": utc_now(), "resume": resume, "status": "running", "completed_this_attempt": 0,
+                   "git": _git_identity()}
         manifest["attempts"].append(attempt)
         manifest["status"] = "running"
         write_json(output / "manifest.json", manifest)
         try:
             versions = runtime_versions(config.estimator)
+            implementation = _implementation_identity()
             source = _source_identity(config)
             if resume:
                 if "versions" in manifest and versions != manifest["versions"]:
                     raise ValueError("resume runtime versions differ from the recorded environment")
                 if "source" in manifest and source != manifest["source"]:
                     raise ValueError("resume data identity changed (name, size or modification time)")
-                if manifest["git"]["commit"] != _git_identity()["commit"]:
+                if "implementation" in manifest and implementation != manifest["implementation"]:
+                    raise ValueError("resume implementation changed; start a new run for the modified package")
+                if manifest["git"]["commit"] != attempt["git"]["commit"]:
                     raise ValueError("resume Git revision changed; start a new run to keep provenance unambiguous")
             base, graphs, membership = _prepare(config)
             graph_info = {"nodes": base.n_nodes, "edges": base.n_edges,
@@ -233,7 +296,13 @@ def run_experiment(config, output_dir, resume=False):
                 write_json(output / "node_ids.json", base.node_ids.tolist())
                 if membership is not None:
                     write_json(output / "clusters.json", membership.tolist())
-            manifest.update(versions=versions, source=source, graph=graph_info, groups=groups,
+            frozen = dict(manifest, versions=versions, implementation=implementation,
+                          source=source, graph=graph_info, groups=groups)
+            identity = _execution_identity(config, frozen)
+            if resume and "execution_identity" in manifest and identity != manifest["execution_identity"]:
+                raise ValueError("resume frozen execution identity changed")
+            manifest.update(versions=versions, implementation=implementation, execution_identity=identity,
+                            source=source, graph=graph_info, groups=groups,
                             seed_schedule="SeedSequence([seed, replicate]).spawn(assignment, noise); noise.spawn(stage)")
             write_json(output / "manifest.json", manifest)
             completed = {row["replicate"] for row in load_records(output)}
@@ -241,7 +310,7 @@ def run_experiment(config, output_dir, resume=False):
             for replicate in range(config.repetitions):
                 if replicate in completed:
                     continue
-                payload = _run_repetition(config, replicate, graphs, membership, groups)
+                payload = _run_repetition(config, replicate, graphs, membership, groups, identity)
                 write_json(output / "replicates" / f"{replicate:06d}.json", payload)
                 completed.add(replicate)
                 attempt["completed_this_attempt"] += 1
@@ -258,6 +327,6 @@ def run_experiment(config, output_dir, resume=False):
             attempt["elapsed_seconds"] = round(time.monotonic() - started, 6)
             write_json(output / "manifest.json", manifest)
             # Also report failed runs; an invalid checkpoint is displayed as invalid, not omitted.
-            from .report import render_report
-            render_report(output)
+            from .report import _render_report_locked
+            _render_report_locked(output)
     return output

@@ -78,7 +78,17 @@ def mse_chart(stats):
 
 
 def render_report(directory):
-    from .runner import load_records, read_json
+    """Rebuild one consistent snapshot; reject writers already holding the run lock."""
+    from .runner import _writer_lock
+
+    directory = Path(directory)
+    with _writer_lock(directory):
+        return _render_report_locked(directory)
+
+
+def _render_report_locked(directory):
+    """Internal entry point for callers that already own the run lock."""
+    from .runner import load_records, read_json, write_text_atomic
 
     directory = Path(directory)
     config = read_json(directory / "config.json")
@@ -149,10 +159,10 @@ def render_report(directory):
                    '<p>Node IDs are sorted once and shared by adjacency, treatment, features and responses. Graphs must be simple, unweighted and have no isolated nodes. Two-hop interference uses Wz + r₂[W(Wz) − diag(W²)z], with W = D⁻¹A; the diagonal removes closed walks without constructing a dense squared adjacency. True GATE is computed by averaging the noise-free global-treatment and global-control outcomes on the evaluation graph.</p>',
                    '<p>OLS fits an intercept and treatment on pooled observations. GNN uses three DGL ChebConv layers (2→16, K=2), (16→16, K=1), (16→1, K=1), ReLU, degree and treatment features, and Adam with betas (0.9, 0.999). Each epoch steps the optimizer through the selected stages in order, using each stage’s own graph. No held-out predictive test set or model-selection search is used.</p>',
                    '<p>Dynamic graphs are fixed across repetitions and evolve independently of treatment: each node at or above the degree median gets five candidate neighbors drawn with replacement proportional to current degree; loops and existing edges are discarded. Initial cluster membership stays fixed. Recorded edge counts are realized values, not a promise to match historical notebook RNG output.</p>',
-                   pre({"source": manifest.get("source"), "graph": graph, "versions": manifest.get("versions"), "git": manifest.get("git"), "seed_schedule": manifest.get("seed_schedule")}),
+                   pre({"source": manifest.get("source"), "graph": graph, "versions": manifest.get("versions"), "git": manifest.get("git"), "implementation": manifest.get("implementation"), "execution_identity": manifest.get("execution_identity"), "seed_schedule": manifest.get("seed_schedule")}),
                    '<details><summary>Realized treatment counts, exposure variation and stage graphs</summary>', pre(diagnostics), '</details>',
                    '</section><section><h2>Exact execution record</h2>',
-                   '<p>Each checkpoint is committed atomically only after all merge groups finish. Resume validates frozen configuration, runtime versions, source file metadata, graph and group identities, and completed records. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions.</p>',
+                   '<p>Each checkpoint is committed atomically only after all merge groups finish and carries the frozen execution identity. Resume validates configuration, package-source fingerprint, runtime versions, source file metadata, graph and group identities, and completed records. Reports and execution share a run lock. A failed repetition restarts from the same deterministic seed. There are no hidden retries or automatic exclusions. Dataset provenance uses filename, size and modification time, not a content hash; these checks prevent accidental mixing, not deliberate tampering.</p>',
                    pre(manifest.get("attempts", [])), '</section><section><h2>Limitations and next step</h2><ul>',
                    ''.join(f'<li>{html.escape(item)}</li>' for item in limitations), '</ul>',
                    '<p>Inspect the diagnostics and migration notes before commissioning the full paper settings. Engineering tests and smoke runs do not establish the manuscript’s scientific results. HT notebooks remain historical references; this runner does not implement the paper’s MII, Hájek, Lagrange or missing MIT8 experiments.</p>',
@@ -162,7 +172,5 @@ def render_report(directory):
                    '<h3>Machine-readable handoff</h3>', pre(handoff, "handoff"),
                    '</section><footer>Standalone report · No external scripts, fonts, styles or images · Generated from validated experiment artifacts</footer></main></body></html>'])
     path = directory / "report.html"
-    temporary = path.with_suffix(".html.tmp")
-    temporary.write_text("".join(blocks), encoding="utf-8")
-    temporary.replace(path)
+    write_text_atomic(path, "".join(blocks))
     return path

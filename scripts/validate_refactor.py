@@ -20,8 +20,9 @@ sys.path.insert(0, str(ROOT))
 
 from rampup.config import ExperimentConfig
 from rampup.metrics import summarize
-from rampup.report import CSS, metric_table, pre, render_report
-from rampup.runner import load_records, read_json, run_experiment, write_json
+from rampup.report import CSS, metric_table, pre, _render_report_locked
+from rampup.runner import (_implementation_identity, _source_identity, _writer_lock,
+                           load_complete_records, read_json, run_experiment, runtime_versions, write_json)
 
 
 def command_check(arguments, cwd):
@@ -30,6 +31,25 @@ def command_check(arguments, cwd):
     return {"command": "python " + " ".join(arguments), "exit_code": result.returncode,
             "elapsed_seconds": round(time.monotonic() - started, 3),
             "stdout": result.stdout, "stderr": result.stderr}
+
+
+def cached_case_summary(name, config, directory):
+    """Count observed, validated evidence; cached success flags are insufficient."""
+    directory = Path(directory)
+    with _writer_lock(directory):
+        if read_json(directory / "config.json") != config.to_dict():
+            raise ValueError("cached case configuration differs")
+        _render_report_locked(directory)
+        records = load_complete_records(directory)
+        manifest = read_json(directory / "manifest.json")
+        if (manifest["implementation"] != _implementation_identity() or
+                manifest["versions"] != runtime_versions(config.estimator) or
+                manifest["source"] != _source_identity(config)):
+            raise ValueError("cached evidence differs from the current implementation, runtime or data")
+        return {"case": name, "status": "complete", "repetitions": len({r["replicate"] for r in records}),
+                "records": len(records), "graph": manifest["graph"], "metrics": summarize(records),
+                "versions": manifest["versions"], "git": manifest["git"],
+                "implementation": manifest["implementation"], "execution_identity": manifest["execution_identity"]}
 
 
 def main():
@@ -61,19 +81,9 @@ def main():
         directory = args.output / name
         error = None
         try:
-            if args.reuse:
-                if read_json(directory / "config.json") != config.to_dict():
-                    raise ValueError("cached case configuration differs")
-                load_records(directory)
-                render_report(directory)
-            else:
+            if not args.reuse:
                 run_experiment(config, directory)
-            records = load_records(directory)
-            manifest = read_json(directory / "manifest.json")
-            metrics = summarize(records)
-            summaries.append({"case": name, "status": manifest["status"], "repetitions": config.repetitions,
-                              "records": len(records), "graph": manifest["graph"], "metrics": metrics,
-                              "versions": manifest["versions"], "git": manifest["git"]})
+            summaries.append(cached_case_summary(name, config, directory))
         except Exception as exc:
             error = {"type": type(exc).__name__, "message": str(exc)}
             summaries.append({"case": name, "status": "failed", "error": error})
@@ -100,7 +110,7 @@ def main():
                                      "Stanford Louvain partition has 197 clusters here, versus 192 in the manuscript.",
                                      "Node alignment, temporal assignment, baseline and RNG corrections change legacy behavior.",
                                      "MII/Hájek/Lagrange/MIT8 supplementary reproductions remain outside implemented scope."],
-               "next_authorized_step": "Finish independent review and push the refactor; full paper replication is a separate study."}
+               "next_authorized_step": "Review the delivered evidence; commission full paper replication as a separate study."}
     result_table = '<div class="scroll"><table><tr><th>Case</th><th>Status</th><th>Repetitions</th><th>Estimates</th><th>Nodes</th><th>Initial edges</th></tr>'
     for case in summaries:
         result_table += '<tr>' + ''.join(f'<td>{html.escape(str(value))}</td>' for value in (
@@ -125,10 +135,11 @@ def main():
               '<details><summary>Complete migration audit and scenario mapping</summary><pre>' + html.escape(documents) + '</pre></details>',
               '<h2>Exact verification record</h2>', pre(checks),
               '<p>The first implementation checks intentionally failed while the new modules were absent. Subsequent red/green cycles exposed and fixed an impossible one-entity baseline on tiny staggered designs and missing validation of stored treatment-count diagnostics. One square-root numerical fixture was corrected after its handwritten expectation omitted its configured factor of two; the production formula was already correct. No historical experiment outcomes were substituted into these checks.</p>',
+              '<p>Independent review reproduced foreign-configuration checkpoint acceptance, unchanged-commit source drift, incomplete-cache acceptance, and concurrent report-write collisions. Regression tests first reproduced those failures. The delivered system binds each checkpoint to its frozen configuration and execution provenance, checks one aggregate package-source fingerprint at execution boundaries, requires the full validated repetition set for cache acceptance, and locks report generation. The bounded cases were rerun after these changes; earlier development outputs are not substituted into this evidence.</p>',
               '<h2>Embedded experiment reports</h2><p>Each section contains the full run configuration, metrics, uncertainty formulas, stage diagnostics, execution attempts, limitations, raw estimates and a machine-readable handoff. All content is embedded; no network, server or sibling file is needed.</p>',
               *case_html,
               '<h2>Reproducibility and handoff</h2><p>Rebuild with <code>python scripts/validate_refactor.py --output outputs/refactor-validation --report reports/refactor-validation.html</code> from a compatible environment. Use a new output directory for new execution; <code>--reuse</code> reuses validated cached case records and reruns test/build checks. The evidence JSON and per-case artifacts live under the selected output directory. Source paths and local task metadata are sanitized in this shareable HTML.</p>',
-              '<p>The code and README still require the recorded independent code review and remote-push verification; those repository operations are distinct from the completed local experiment evidence. Full paper-sized runs, historical partition recovery and supplementary missing-source experiments are separate follow-up work.</p>',
+              '<p>Repository publication and its Git history are distinct from this timestamped experimental evidence. Full paper-sized runs, historical partition recovery and supplementary missing-source experiments are separate follow-up work.</p>',
               '<h3>Machine-readable handoff</h3>', pre(handoff, "handoff"),
               '<details><summary>Complete validation metadata</summary>', pre(evidence), '</details>',
               '<footer>NeurIPS 2026 · <a href="https://arxiv.org/abs/2410.12740">arXiv:2410.12740</a> · Offline standalone report · No hidden or quarantined outcomes included</footer></main></body></html>']
