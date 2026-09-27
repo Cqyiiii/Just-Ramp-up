@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "just-ramp-up"
+version = "0.1.0"
+description = "Reproducible ramp-up experiments under network interference"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "Qianyi Chen"}, {name = "Bo Li"}]
+dependencies = ["numpy>=1.24", "scipy>=1.10", "networkx>=3.2"]
+
+[project.optional-dependencies]
+gnn = ["torch>=2.0", "dgl>=2.0"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+rampup = "rampup.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rampup*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["gnn: requires the optional Torch/DGL runtime"]
