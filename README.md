@@ -2,7 +2,7 @@
 
 # Just Ramp-Up
 
-### Debiasing Regression-based Estimator for A/B Tests under Network Interference
+### Debiasing Regression-Based Causal Estimation under Network Interference
 
 **Qianyi Chen · Bo Li**<br>
 School of Economics and Management, Tsinghua University
@@ -20,7 +20,7 @@ School of Economics and Management, Tsinghua University
 
 Ramp-up experiments already vary the proportion of treated users. **Pooling their data can improve regression-based estimation of the global average treatment effect (GATE)** under network interference by enriching the treatment exposures used for training.
 
-This repository contains the simulation code for **NeurIPS 2026**, with a configuration-driven experiment runner, sparse graph computations, the paper's lightweight GNN, and reproducible reports. The current manuscript uses the title above; the [arXiv record](https://arxiv.org/abs/2410.12740) retains the earlier title, *Just Ramp-up: Unleash the Potential of Regression-based Estimator for A/B Tests under Network Interference*.
+This repository contains the simulation code for **Just Ramp-Up: Debiasing Regression-Based Causal Estimation under Network Interference** (**NeurIPS 2026**), with a configuration-driven experiment runner, sparse graph computations, the paper's lightweight GNN, and reproducible reports. The manuscript is available on [arXiv](https://arxiv.org/abs/2410.12740).
 
 ## Quick start
 
@@ -127,12 +127,12 @@ The 37 original notebooks are preserved unchanged in [`notebooks/legacy/`](noteb
 
 ## Citation
 
-The NeurIPS 2026 manuscript uses the updated title at the top of this page. The following entry cites the linked arXiv preprint:
+The following entry uses the current manuscript title and retains the original preprint's arXiv identifier and year:
 
 ```bibtex
 @misc{chen2024justrampup,
-  title         = {Just Ramp-up: Unleash the Potential of Regression-based
-                   Estimator for A/B Tests under Network Interference},
+  title         = {Just Ramp-Up: Debiasing Regression-Based Causal Estimation
+                   under Network Interference},
   author        = {Qianyi Chen and Bo Li},
   year          = {2024},
   eprint        = {2410.12740},
