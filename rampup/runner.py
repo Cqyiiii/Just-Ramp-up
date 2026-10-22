@@ -111,12 +111,18 @@ def _source_identity(config):
                 "graph_seed": config.graph_seed}
     path = Path(config.dataset)
     stat = path.stat()
-    return {"name": path.name, "size_bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+    identity = {"name": path.name, "size_bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+    if config.clustering == "legacy_edgelist":
+        # File order is part of the scientific input for this opt-in mode.
+        identity["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return identity
 
 
 def _prepare(config):
     base = demo_graph(config.graph_seed) if config.dataset == "demo" else load_graph(config.dataset)
-    membership = cluster_membership(base, config.resolution, config.cluster_seed) if config.level == "cluster" else None
+    legacy_edgelist = config.dataset if config.clustering == "legacy_edgelist" else None
+    membership = (cluster_membership(base, config.resolution, config.cluster_seed, legacy_edgelist=legacy_edgelist)
+                  if config.level == "cluster" else None)
     graphs = evolve_graphs(base, len(config.stages), config.graph_seed) if config.outcome == "dynamic" else [base] * len(config.stages)
     if config.merge == "baseline_pair":
         graphs = [base] + graphs
@@ -285,6 +291,10 @@ def run_experiment(config, output_dir, resume=False):
                           "clusters": int(len(np.unique(membership))) if membership is not None else None,
                           "minimum_degree": float(base.degrees.min()), "maximum_degree": float(base.degrees.max()),
                           "stage_edges": [g.n_edges for g in graphs], "node_order": "sorted original IDs"}
+            if membership is not None:
+                partition = {"node_ids": base.node_ids.tolist(), "membership": membership.tolist()}
+                graph_info.update(clustering=config.clustering,
+                                  partition_sha256=hashlib.sha256(json.dumps(partition, separators=(",", ":")).encode()).hexdigest())
             groups = [{"label": label, "indices": list(indices), "truth": true_gate(graphs[indices[-1]], config)}
                       for label, indices in merge_groups(config)]
             if resume and "graph" in manifest:

@@ -19,6 +19,7 @@ class ExperimentConfig:
     seed: int = 2026
     graph_seed: int = 0
     cluster_seed: int = 10
+    clustering: str = "canonical"
     model_seed: int = 2
     resolution: float = 10.0
     epochs: int = 400
@@ -39,6 +40,7 @@ class ExperimentConfig:
             "merge": {"suffix", "baseline_pair", "final_pair", "repeated"},
             "baseline": {"zero", "one"}, "estimator": {"ols", "gnn"},
             "purpose": {"simulation", "smoke"},
+            "clustering": {"canonical", "legacy_edgelist"},
         }
         for name, allowed in choices.items():
             value = getattr(self, name)
@@ -46,6 +48,8 @@ class ExperimentConfig:
                 raise ValueError(f"{name} must be one of {sorted(allowed)}")
         if not isinstance(self.dataset, str) or not self.dataset.strip():
             raise ValueError("dataset must be a path or 'demo'")
+        if self.clustering == "legacy_edgelist" and (self.level != "cluster" or self.dataset == "demo"):
+            raise ValueError("legacy_edgelist clustering requires level='cluster' and a repository edge-list dataset")
         for name in ("repetitions", "epochs", "threads", "seed", "graph_seed", "cluster_seed", "model_seed"):
             value = getattr(self, name)
             minimum = 1 if name in {"repetitions", "epochs", "threads"} else 0
@@ -71,6 +75,10 @@ class ExperimentConfig:
     def to_dict(self):
         result = asdict(self)
         result["stages"] = list(self.stages)
+        # Historical config/manifest identities predate this optional choice.
+        # Preserve their serialization so old reports remain readable.
+        if self.clustering == "canonical":
+            result.pop("clustering")
         return result
 
     @classmethod

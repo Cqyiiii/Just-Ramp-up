@@ -1,0 +1,15 @@
+{
+  "dataset": "Dataset/socfb-Stanford3.mtx",
+  "outcome": "linear",
+  "level": "cluster",
+  "clustering": "legacy_edgelist",
+  "randomization": "complete",
+  "temporal": "staggered",
+  "merge": "suffix",
+  "stages": [0.02, 0.05, 0.1, 0.25, 0.5],
+  "estimator": "ols",
+  "repetitions": 3,
+  "resolution": 10,
+  "cluster_seed": 10,
+  "purpose": "smoke"
+}

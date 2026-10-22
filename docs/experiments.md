@@ -38,6 +38,7 @@ JSON configurations are validated before execution. Unknown fields, nonfinite nu
 | `repetitions`, `seed` | 100, 2026 |
 | `epochs`, `learning_rate`, `model_seed`, `threads` | 400, 0.004, 2, 1 |
 | `resolution`, `cluster_seed`, `graph_seed` | 10, 10, 0 |
+| `clustering` | `canonical` (unchanged default) or `legacy_edgelist` (archived edge insertion and cluster numbering; cluster level only) |
 | `alpha`, `beta`, `gamma`, `sigma`, `r2` | 1, 1, 1, 0.1, 0.5 |
 | `purpose` | `simulation` or `smoke`; controls the report's claim boundary, not the computation |
 
@@ -60,6 +61,15 @@ Complete randomization selects `floor(p*m)` of the `m` entities. Cluster-level e
 # Inspect the supplied real graph, optionally calculate the partition.
 python -m rampup inspect Dataset/socfb-Stanford3.mtx --clusters
 
+# Recover the archived 192-community partition without fitting a model.
+python -m rampup inspect Dataset/socfb-Stanford3.mtx --clusters --clustering legacy_edgelist
+
+# Check both full Stanford partitions against frozen membership hashes; no training.
+python scripts/validate_louvain.py --output outputs/louvain-validation
+
+# Bounded OLS diagnostic using the recovered partition (3 repetitions).
+python -m rampup run --config configs/stanford-legacy-cluster-ols.json --output outputs/legacy-cluster-ols
+
 # Quick sparse two-hop pipeline check.
 python -m rampup run --config configs/smoke-ols.json --output outputs/smoke-two-hop
 
@@ -74,7 +84,9 @@ python -m rampup run --config configs/paper-linear-unit.json --output outputs/li
 python -m rampup report outputs/linear-unit
 ```
 
-`run` accepts overrides for `--dataset`, `--estimator`, `--repetitions`, `--epochs`, `--seed` and `--threads`. For other choices, copy and edit a small JSON config. Use a different output directory for every changed design. No output directory is overwritten implicitly. To batch studies, loop over config files and give each run a unique output path; the runner itself is intentionally serial and resumable.
+`run` accepts overrides for `--dataset`, `--estimator`, `--repetitions`, `--epochs`, `--seed`, `--threads` and `--clustering`. For other choices, copy and edit a small JSON config. Use a different output directory for every changed design. No output directory is overwritten implicitly. To batch studies, loop over config files and give each run a unique output path; the runner itself is intentionally serial and resumable.
+
+`legacy_edgelist` requires a repository-format edge file and `level="cluster"`; it refuses `demo` and standard Matrix Market rather than guessing the original insertion order. It changes only the partition and community numbering, not the maintained assignment count rule or other scientific corrections. The default `clustering="canonical"` is omitted from serialized configs to preserve pre-existing report identities; new cluster manifests explicitly record the mode and membership hash. See [Louvain reproduction](louvain-reproduction.md) for the evidence and limitations.
 
 ## Outputs
 
@@ -92,7 +104,7 @@ outputs/my-study/
 
 Reports include exact estimates, graph-specific truth, signed bias, population standard deviation, empirical MSE and Monte Carlo intervals. Student-t intervals for bias use the sample standard error; MSE intervals use a normal approximation. These quantify Monte Carlo uncertainty, not uncertainty about deploying a real treatment. Comparisons share stage data within each repetition. Do not interpret marginal intervals as independent pairwise tests. The visible machine-readable handoff is in `<pre id="handoff">` and is derived from the same records as the tables.
 
-Checkpoints and reports are written by atomic replacement and protected by the same advisory run lock. A process crash releases the lock. On resume, a missing full repetition is deterministically recomputed; corrupt or mismatched checkpoints fail rather than being silently discarded. Every checkpoint carries an identity derived from its frozen configuration and execution metadata. One small package-source fingerprint detects changed implementations, including uncommitted edits and installed packages without Git metadata. Dataset identity remains a lightweight filename/size/mtime check, not a content hash or tamper-proof archive. Failures produce a report when the run configuration and manifest remain readable. Fix the underlying failure and use `--resume`; do not fill rows by hand.
+Checkpoints and reports are written by atomic replacement and protected by the same advisory run lock. A process crash releases the lock. On resume, a missing full repetition is deterministically recomputed; corrupt or mismatched checkpoints fail rather than being silently discarded. Every checkpoint carries an identity derived from its frozen configuration and execution metadata. One small package-source fingerprint detects changed implementations, including uncommitted edits and installed packages without Git metadata. Default dataset identity remains a lightweight filename/size/mtime check; `legacy_edgelist` additionally hashes the data bytes because their order is part of the partition input. New cluster manifests bind the original IDs and ordered memberships into a SHA-256 hash. This is not a tamper-proof archive. Failures produce a report when the run configuration and manifest remain readable. Fix the underlying failure and use `--resume`; do not fill rows by hand.
 
 `python scripts/validate_refactor.py --reuse` rebuilds the engineering report only from complete validated case records, with the same implementation, runtime and data identity. Missing repetitions fail this gate even if an old manifest says `complete`. Historical reports can still be rebuilt with `python -m rampup report`; their recorded provenance remains visible. Schema 2 checkpoints require execution identities; development-era schema 1 outputs cannot be resumed and need a fresh output directory.
 

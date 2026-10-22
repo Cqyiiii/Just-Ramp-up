@@ -64,14 +64,13 @@ def from_networkx(graph):
     return _graph(adjacency, nodes)
 
 
-def load_graph(path):
-    """Read Matrix Market or repository format: `n n edge_rows`, then 1-based edges."""
+def _read_edge_list(path):
+    """Read and validate repository-format endpoints without reordering them."""
     path = Path(path)
     with path.open() as stream:
         first = stream.readline().strip()
     if first.startswith("%%MatrixMarket"):
-        matrix = sparse.csr_matrix(mmread(path))
-        return _graph(matrix, np.arange(1, matrix.shape[0] + 1))
+        raise ValueError("legacy_edgelist requires the repository edge-list format, not Matrix Market")
     try:
         n, columns, rows = (int(v) for v in first.split())
         edges = np.loadtxt(path, skiprows=1, dtype=float, ndmin=2)
@@ -81,8 +80,19 @@ def load_graph(path):
         raise ValueError("graph dimensions or edge row count do not match header")
     if not np.isfinite(edges).all() or np.any(edges != np.floor(edges)) or np.any(edges < 1) or np.any(edges > n):
         raise ValueError("edge endpoints must be integer IDs within 1..n")
-    endpoints = edges.astype(np.int64) - 1
-    matrix = sparse.coo_matrix((np.ones(rows), (endpoints[:, 0], endpoints[:, 1])), shape=(n, n)).tocsr()
+    return n, edges.astype(np.int64) - 1
+
+
+def load_graph(path):
+    """Read Matrix Market or repository format: `n n edge_rows`, then 1-based edges."""
+    path = Path(path)
+    with path.open() as stream:
+        first = stream.readline().strip()
+    if first.startswith("%%MatrixMarket"):
+        matrix = sparse.csr_matrix(mmread(path))
+        return _graph(matrix, np.arange(1, matrix.shape[0] + 1))
+    n, endpoints = _read_edge_list(path)
+    matrix = sparse.coo_matrix((np.ones(len(endpoints)), (endpoints[:, 0], endpoints[:, 1])), shape=(n, n)).tocsr()
     return _graph(matrix, np.arange(1, n + 1))
 
 
@@ -90,13 +100,39 @@ def demo_graph(seed=0):
     return from_networkx(nx.connected_watts_strogatz_graph(60, 6, 0.2, seed=seed))
 
 
-def cluster_membership(graph, resolution=10.0, seed=10):
-    canonical = nx.from_scipy_sparse_array(graph.adjacency)
-    clusters = nx.community.louvain_communities(canonical, resolution=resolution, seed=seed)
-    clusters.sort(key=lambda nodes: (-len(nodes), min(nodes)))
+def cluster_membership(graph, resolution=10.0, seed=10, *, legacy_edgelist=None):
+    """Partition into canonical rows, optionally preserving archived edge insertion.
+
+    The default is unchanged. Legacy mode preserves both the source graph's
+    insertion order and the notebooks' stable descending-size cluster labels;
+    it does not change treatment counts, RNG streams or outcome generation.
+    """
+    if legacy_edgelist is None:
+        source = nx.from_scipy_sparse_array(graph.adjacency)
+    else:
+        n, endpoints = _read_edge_list(legacy_edgelist)
+        if n != graph.n_nodes or not np.array_equal(graph.node_ids, np.arange(1, n + 1)):
+            raise ValueError("legacy edge-list node IDs do not match the canonical graph")
+        source = nx.Graph()
+        # Do not pre-insert sorted nodes: first occurrence in this edge stream
+        # determines the node order shuffled by Louvain's local random state.
+        source.add_edges_from((int(u) + 1, int(v) + 1) for u, v in endpoints)
+        if set(source) != set(graph.node_ids):
+            raise ValueError("legacy edge-list nodes do not match the canonical graph")
+        adjacency = nx.to_scipy_sparse_array(source, nodelist=graph.node_ids, dtype=float, format="csr")
+        if (adjacency != graph.adjacency).nnz:
+            raise ValueError("legacy edge-list edges do not match the canonical graph")
+    clusters = nx.community.louvain_communities(source, resolution=resolution, seed=seed)
+    if legacy_edgelist is None:
+        clusters.sort(key=lambda nodes: (-len(nodes), min(nodes)))
+    else:
+        clusters.sort(key=len, reverse=True)
     membership = np.empty(graph.n_nodes, dtype=np.int64)
     for index, nodes in enumerate(clusters):
-        membership[list(nodes)] = index
+        rows = np.asarray(list(nodes), dtype=np.int64)
+        if legacy_edgelist is not None:
+            rows = rows - 1  # Source IDs are 1..n; canonical matrix rows are 0..n-1.
+        membership[rows] = index
     return membership
 
 

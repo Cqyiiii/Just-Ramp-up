@@ -26,7 +26,11 @@ These corrections preserve the intended formulas and architecture, not the exact
 
 ## Graph partition discrepancy
 
-The checked-in Stanford file validates to **11,586 nodes and 568,309 undirected edges**, matching the manuscript. Under canonical node order and the validation environment's NetworkX 3.6.1, Louvain with resolution 10 and seed 10 yields **197 communities**; the manuscript lists **192**. The implementation records the actual `clusters.json` partition, package versions and graph counts. Matching a seed and resolution alone does not recreate an unspecified historical node ordering and library implementation. Exact historical replication requires the original partition and environment.
+The checked-in Stanford file validates to **11,586 nodes and 568,309 undirected edges**, matching the manuscript. The 2026-10-22 partition audit identified **node insertion order** as a sufficient cause of the 192/197 discrepancy. With resolution 10 and seed 10 held fixed, the archived notebooks' edge-insertion order yields **192 communities**; canonical node order yields **197**. Pre-inserting sorted nodes before adding the unchanged original edge stream produces the exact maintained 197 partition. The complete edge sets are identical. NetworkX 2.8.8, 3.2.1, 3.3 and 3.6.1 produced the same respective full partitions in the audit environment; a library-version difference is not needed to explain this discrepancy.
+
+The maintained default remains `clustering="canonical"`. Opt into `clustering="legacy_edgelist"` to reconstruct the archived edge-order partition while retaining canonical matrix/feature alignment. This mode also retains the notebooks' stable descending-size community numbering. It validates the source topology against the canonical graph, records a dataset content hash and the ordered membership hash, and writes the actual `clusters.json`. See [the diagnosis and reproduction commands](louvain-reproduction.md).
+
+This recovers the archived algorithm's 192-community partition, **not certified reproduction of the paper's complete numerical results**. No historical membership artifact tied to the paper run or exact historical NetworkX environment was found. The original notebooks' treatment-count rules, RNG streams and other differences above remain distinct. Changing clustering requires a fresh run directory; never replace a completed run's `clusters.json` or mix its checkpoints with the other partition. Historical results and reports remain unchanged.
 
 ## Scenario mapping
 
